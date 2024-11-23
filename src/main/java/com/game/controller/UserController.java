@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = "https://fe-bbtronic.vercel.app") // Permite solicitudes solo desde este origen
+@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde este origen
 @RequestMapping("/api/users")
 public class UserController {
 
