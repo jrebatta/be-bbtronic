@@ -89,6 +89,18 @@
   <build>
     <plugins>
       <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>3.3.5</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.11.0</version>
@@ -104,7 +116,6 @@
         <configuration>
           <archive>
             <manifest>
-              <!-- Reemplaza 'com.game.AppGameApplication' con la clase principal de tu proyecto -->
               <mainClass>com.game.AppGameApplication</mainClass>
             </manifest>
           </archive>
@@ -112,5 +123,6 @@
       </plugin>
     </plugins>
   </build>
+
 
 </project>
