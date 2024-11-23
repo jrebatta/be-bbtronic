@@ -1,5 +1,5 @@
 # Usa una imagen base con Maven para compilar y ejecutar la aplicación
-FROM eclipse-temurin:17-jdk as builder
+FROM eclipse-temurin:21-jdk as builder
 
 # Establece el directorio de trabajo para la compilación
 WORKDIR /app
@@ -14,7 +14,7 @@ RUN chmod +x mvnw
 RUN ./mvnw clean package -DskipTests
 
 # Usa una imagen más ligera para ejecutar la aplicación
-FROM eclipse-temurin:17-jdk
+FROM eclipse-temurin:21-jdk
 
 # Establece el directorio de trabajo para la ejecución
 WORKDIR /app
