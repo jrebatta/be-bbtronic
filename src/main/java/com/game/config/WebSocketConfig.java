@@ -19,7 +19,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/websocket") // Endpoint del WebSocket
-                .setAllowedOrigins("https://be-bbtronic.onrender.com") // Permitir solicitudes desde el origen del frontend
+                .setAllowedOrigins("https://fe-bbtronic.vercel.app") // Permitir solicitudes desde el origen del frontend
                 .withSockJS(); // Habilitar SockJS
     }
 }
