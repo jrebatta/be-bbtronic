@@ -23,6 +23,13 @@ public class UserController {
         this.userService = userService;
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<List<User>> getAllUsers() {
+        List<User> allUsers = userService.getAllUsers();
+        return ResponseEntity.ok(allUsers);
+    }
+
+
     @GetMapping("/register")
     public ResponseEntity<Map<String, String>> registerUser(@RequestParam("username") String username) {
         try {
