@@ -4,8 +4,11 @@ FROM eclipse-temurin:17-jdk as builder
 # Establece el directorio de trabajo para la compilación
 WORKDIR /app
 
-# Copia los archivos del proyecto al contenedor
+# Copia todos los archivos necesarios para el build
 COPY . .
+
+# Ajusta permisos para mvnw
+RUN chmod +x mvnw
 
 # Ejecuta el comando Maven para construir el JAR
 RUN ./mvnw clean package -DskipTests
