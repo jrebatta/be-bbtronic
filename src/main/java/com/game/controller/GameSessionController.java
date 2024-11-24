@@ -201,4 +201,15 @@ public class GameSessionController {
         Question currentQuestion = orderedQuestions.get(currentIndex);
         return ResponseEntity.ok(currentQuestion);
     }
+
+    @PostMapping("/reset")
+    public ResponseEntity<String> resetGameData() {
+        try {
+            gameSessionService.resetGameData();
+            return ResponseEntity.ok("Game data has been reset successfully.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to reset game data: " + e.getMessage());
+        }
+    }
 }

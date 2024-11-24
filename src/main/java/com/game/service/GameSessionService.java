@@ -8,6 +8,7 @@ import com.game.repository.QuestionRepository;
 import com.game.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ public class GameSessionService {
     private final GameSessionRepository gameSessionRepository;
     private final UserRepository userRepository;
     private final QuestionRepository questionRepository;
+    private final JdbcTemplate jdbcTemplate = null;
 
 
     @Autowired
@@ -31,9 +33,12 @@ public class GameSessionService {
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
+
     }
 
-
+    public void resetGameData() {
+        jdbcTemplate.execute("CALL reset_game_data();");
+    }
 
     // Crear una sesión de juego y asignar al usuario creador
     @Transactional
