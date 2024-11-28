@@ -9,8 +9,6 @@ import com.game.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.handler.annotation.DestinationVariable;
-import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app",}) // Permite solicitudes solo desde este origen
+@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde este origen
 @RequestMapping("/api/game-sessions")
 public class GameSessionController {
 
@@ -77,22 +75,26 @@ public class GameSessionController {
     public ResponseEntity<?> getGameSession(@PathVariable("sessionCode") String sessionCode) {
         try {
             GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
+            List<User> users = gameSessionService.getUsersInSession(sessionCode); // Obtener usuarios de la sesión
+
             Map<String, Object> response = new HashMap<>();
             response.put("creator", session.getCreatorName());
             response.put("gameStarted", session.isGameStarted());
+            response.put("users", users); // Agregar lista de usuarios a la respuesta
+
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Código de sesión inválido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Código de sesión inválido."));
         }
     }
 
+
     // Endpoint para unirse a una sesión existente
     @PostMapping("/join")
-    public ResponseEntity<Map<String, String>> joinGameSession(@RequestBody Map<String, String> requestData) {
+    public ResponseEntity<?> joinGameSession(@RequestBody Map<String, String> requestData) {
         String sessionCode = requestData.get("sessionCode");
         String username = requestData.get("username");
 
-        // Validar datos básicos
         if (sessionCode == null || sessionCode.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "El código de sesión es obligatorio."));
         }
@@ -101,20 +103,27 @@ public class GameSessionController {
         }
 
         try {
-            // Delegar la lógica de negocio al servicio
-            Map<String, String> response = gameSessionService.joinGameSession(sessionCode, username);
-            return ResponseEntity.ok(response);
+            // Registrar usuario y agregarlo a la sesión
+            User user = userService.registerUser(username);
+            gameSessionService.addUserToSession(sessionCode, user);
 
+            // Obtener la lista actualizada de usuarios
+            List<User> updatedUsers = gameSessionService.getUsersInSession(sessionCode);
+
+            // Enviar evento a través del WebSocket para notificar a todos los usuarios
+            Map<String, Object> message = new HashMap<>();
+            message.put("event", "userUpdate");
+            message.put("users", updatedUsers);
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, message);
+
+            // Respuesta para el usuario que se une
+            return ResponseEntity.ok(Map.of("sessionToken", user.getSessionToken()));
         } catch (IllegalArgumentException e) {
-            // Manejar excepciones específicas
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
-
-        } catch (Exception e) {
-            // Manejar errores generales
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Ocurrió un error inesperado: " + e.getMessage()));
         }
     }
+
+
 
 
 
