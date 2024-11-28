@@ -9,14 +9,12 @@ import com.game.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
-import java.util.Random;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,38 +24,79 @@ public class GameSessionService {
     private final UserRepository userRepository;
     private final QuestionRepository questionRepository;
     private final JdbcTemplate jdbcTemplate = null;
+    private final SimpMessagingTemplate messagingTemplate; // Declaración del campo
 
 
     @Autowired
-    public GameSessionService(GameSessionRepository gameSessionRepository, UserRepository userRepository, QuestionRepository questionRepository) {
+    public GameSessionService(GameSessionRepository gameSessionRepository,
+                              UserRepository userRepository,
+                              QuestionRepository questionRepository,
+                              SimpMessagingTemplate messagingTemplate) { // Inyección del template
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
+        this.messagingTemplate = messagingTemplate; // Inicialización del template
 
     }
 
-    public void resetGameData() {
-        jdbcTemplate.execute("CALL reset_game_data();");
-    }
+    public Map<String, String> joinGameSession(String sessionCode, String username) {
+        // Validar que la sesión exista
+        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new IllegalArgumentException("El código de sesión es inválido."));
 
-    // Crear una sesión de juego y asignar al usuario creador
-    @Transactional
-    public GameSession createGameSession(User user) {
-        // Verificar si el usuario ya está en la base de datos (opcional)
-        if (!userRepository.findByUsername(user.getUsername()).isPresent()) {
-            userRepository.save(user);
+        // Validar que el usuario no exista ya en la sesión
+        if (session.getUsers().stream().anyMatch(user -> user.getUsername().equals(username))) {
+            throw new IllegalArgumentException("El usuario ya está en la sesión.");
         }
 
+        // Crear un nuevo usuario
+        User user = userRepository.findByUsername(username)
+                .orElseGet(() -> userRepository.save(new User(username)));
 
-        // Crear la sesión de juego y asignar el usuario creador
+        // Asociar el usuario a la sesión
+        user.setGameSession(session);
+        userRepository.save(user);
+
+        session.addUser(user);
+        gameSessionRepository.save(session);
+
+        // Respuesta de éxito
+        Map<String, String> response = new HashMap<>();
+        response.put("sessionToken", user.getSessionToken());
+        return response;
+    }
+
+    public void resetGameData(String sessionCode) {
+        // Ejecuta el procedimiento almacenado con el código de sesión proporcionado
+        String sql = "CALL reset_game_data(?);";
+        jdbcTemplate.update(sql, sessionCode);
+    }
+
+
+    @Transactional
+    public GameSession createGameSession(User user) {
+        // Verificar si el usuario ya existe
+        if (userRepository.findByUsername(user.getUsername()).isEmpty()) {
+            userRepository.saveAndFlush(user); // Persistir el usuario si no existe
+        }
+
+        // Crear la sesión de juego
         GameSession gameSession = new GameSession();
         gameSession.setCreatorName(user.getUsername());
         gameSession.setSessionCode(generateSessionCode());
-        gameSession.addUser(user); // Agregar al usuario creador a la sesión
 
-        // Guardar la sesión en la base de datos
-        return gameSessionRepository.save(gameSession);
+        // Guardar y forzar la persistencia de la sesión
+        GameSession savedSession = gameSessionRepository.saveAndFlush(gameSession);
+
+        // Asociar el usuario a la sesión guardada
+        user.setGameSession(savedSession);
+        userRepository.saveAndFlush(user); // Guardar el usuario con el session_id
+
+        return savedSession;
     }
+
+
+
 
     // Generar un código de 4 dígitos
     private String generateSessionCode() {
@@ -95,9 +134,15 @@ public class GameSessionService {
     // Método que borra todas las sesiones al iniciar la aplicación
     @PostConstruct
     public void clearUsersOnStartup() {
+        // Eliminar todos los usuarios primero
+        userRepository.deleteAll();
+
+        // Ahora eliminar todas las sesiones
         gameSessionRepository.deleteAll();
-        System.out.println("Todas las sesiones han sido borradas al iniciar la aplicación.");
+
+        System.out.println("Todos los usuarios y sesiones han sido borrados al iniciar la aplicación.");
     }
+
 
     // Nuevo método para obtener una sesión por su código
     public GameSession getGameSessionByCode(String sessionCode) {
@@ -126,7 +171,7 @@ public class GameSessionService {
 
         List<Question> orderedQuestions = session.getQuestions().stream()
                 .sorted(Comparator.comparingLong(Question::getId))
-                .collect(Collectors.toList());
+                .toList();
 
         int currentIndex = session.getCurrentQuestionIndex();
 
@@ -158,12 +203,13 @@ public class GameSessionService {
         if (filteredQuestions.isEmpty()) {
             filteredQuestions = questions.stream()
                     .filter(q -> !q.getToUser().equals(lastToUser))
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         // Si todavía no hay preguntas, esto indica que todas las preguntas se han mostrado.
         if (filteredQuestions.isEmpty()) {
-            throw new IllegalArgumentException("Todas las preguntas han sido mostradas");
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"allQuestionsShown\"}");
+            throw new IllegalStateException("Se mostraron todas las preguntas");
         }
 
         // Selecciona una pregunta aleatoria de las preguntas filtradas
@@ -177,6 +223,7 @@ public class GameSessionService {
 
         return nextQuestion;
     }
+
 
     public void saveQuestion(String sessionCode, String fromUser, String toUser, String questionText, boolean anonymous) {
         GameSession session = getGameSessionByCode(sessionCode);
@@ -199,8 +246,4 @@ public class GameSessionService {
                 .sorted(Comparator.comparingLong(Question::getId))
                 .collect(Collectors.toList());
     }
-
-
-
-
 }

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 @Entity
+@Table(name = "game_session")
 public class GameSession {
 
     @Id
@@ -30,8 +31,8 @@ public class GameSession {
     @OneToMany(mappedBy = "gameSession", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Question> questions = new ArrayList<>();
 
-    @OneToMany(mappedBy = "gameSession", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @JsonManagedReference // Indica el lado propietario de la relación
+    @OneToMany(mappedBy = "gameSession", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
     private List<User> users = new ArrayList<>();
 
     public GameSession() {

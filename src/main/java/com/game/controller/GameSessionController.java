@@ -1,6 +1,5 @@
 package com.game.controller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.model.GameSession;
 import com.game.model.Question;
@@ -20,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde este origen
+@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app",}) // Permite solicitudes solo desde este origen
 @RequestMapping("/api/game-sessions")
 public class GameSessionController {
 
@@ -41,9 +40,13 @@ public class GameSessionController {
     @PostMapping("/create")
     public ResponseEntity<Map<String, String>> createGameSession(@RequestParam("username") String username) {
         try {
+            // Registrar al usuario o recuperarlo si ya existe
             User user = userService.registerUser(username);
+
+            // Crear la sesión de juego y asociarla al usuario
             GameSession gameSession = gameSessionService.createGameSession(user);
 
+            // Construir la respuesta con los datos generados
             Map<String, String> response = new HashMap<>();
             response.put("username", user.getUsername());
             response.put("sessionToken", user.getSessionToken());
@@ -51,17 +54,24 @@ public class GameSessionController {
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
+            // Manejar errores específicos como usuario ya existente o sesión no válida
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+        } catch (Exception e) {
+            // Manejar errores generales
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Ocurrió un error inesperado: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
-    @MessageMapping("/updateQuestion/{sessionCode}")
-    public void updateQuestion(@DestinationVariable String sessionCode) {
-        // Enviar mensaje de actualización a todos los suscriptores
-        messagingTemplate.convertAndSend("/topic/" + sessionCode, "update");
-    }
+
+//    @MessageMapping("/updateQuestion/{sessionCode}")
+//    public void updateQuestion(@DestinationVariable String sessionCode) {
+//        // Enviar mensaje de actualización a todos los suscriptores
+//        messagingTemplate.convertAndSend("/topic/" + sessionCode, "update");
+//    }
 
     @GetMapping("/{sessionCode}")
     public ResponseEntity<?> getGameSession(@PathVariable("sessionCode") String sessionCode) {
@@ -82,28 +92,31 @@ public class GameSessionController {
         String sessionCode = requestData.get("sessionCode");
         String username = requestData.get("username");
 
+        // Validar datos básicos
+        if (sessionCode == null || sessionCode.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El código de sesión es obligatorio."));
+        }
+        if (username == null || username.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El nombre de usuario es obligatorio."));
+        }
+
         try {
-            User user = userService.registerUser(username);
-            gameSessionService.addUserToSession(sessionCode, user);
-
-            // Obtener la lista completa de usuarios actualizada
-            List<User> updatedUsers = gameSessionService.getUsersInSession(sessionCode);
-
-            // Crear un mensaje JSON para enviar a los clientes
-            Map<String, Object> message = new HashMap<>();
-            message.put("event", "userUpdate");
-            message.put("users", updatedUsers);
-
-            // Enviar el mensaje a todos los suscriptores
-            messagingTemplate.convertAndSend("/topic/" + sessionCode, message);
-
-            Map<String, String> response = new HashMap<>();
-            response.put("sessionToken", user.getSessionToken());
+            // Delegar la lógica de negocio al servicio
+            Map<String, String> response = gameSessionService.joinGameSession(sessionCode, username);
             return ResponseEntity.ok(response);
+
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(409).body(null);
+            // Manejar excepciones específicas
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+
+        } catch (Exception e) {
+            // Manejar errores generales
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Ocurrió un error inesperado: " + e.getMessage()));
         }
     }
+
+
 
     @GetMapping("/{sessionCode}/users")
     public ResponseEntity<?> getUsersInSession(@PathVariable("sessionCode") String sessionCode) {
@@ -140,41 +153,49 @@ public class GameSessionController {
 
     // Endpoint para iniciar el juego
     @PostMapping("/{sessionCode}/start-game")
-    public ResponseEntity<Void> startGame(@PathVariable String sessionCode) {
+    public ResponseEntity<Map<String, String>> startGame(@PathVariable String sessionCode) {
         gameSessionService.startGame(sessionCode);
 
         // Notificar a todos los usuarios que el juego ha comenzado
         messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"gameStarted\"}");
 
-        return ResponseEntity.ok().build();
-    }
+        // Crear el objeto de respuesta JSON
+        Map<String, String> response = new HashMap<>();
+        response.put("mensaje", "Juego iniciado");
 
-    @GetMapping("/{sessionCode}/check-all-ready")
-    public ResponseEntity<Map<String, Boolean>> checkAllReady(@PathVariable("sessionCode") String sessionCode) {
-        GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
-        boolean allReady = session.getUsers().stream().allMatch(user -> user.isReady());
-
-        if (allReady) {
-            System.out.println("Todos los usuarios están listos. Enviando evento allReady...");
-            messagingTemplate.convertAndSend("/topic/" + sessionCode, "allReady");
-        }
-
-        Map<String, Boolean> response = new HashMap<>();
-        response.put("allReady", allReady);
         return ResponseEntity.ok(response);
     }
 
 
+    @GetMapping("/{sessionCode}/check-all-ready")
+    public ResponseEntity<Map<String, Object>> checkAllReady(@PathVariable("sessionCode") String sessionCode) {
+        GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
+        boolean allReady = session.getUsers().stream().allMatch(User::isReady);
+
+        if (allReady) {
+            System.out.println("Todos los usuarios están listos. Enviando evento allReady...");
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"allReady\"}");
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("allReady", allReady);
+        response.put("message", allReady ? "Todos los usuarios están listos" : "Aún faltan usuarios por estar listos");
+
+        return ResponseEntity.ok(response);
+    }
 
 
     @PostMapping("/{sessionCode}/next-random-question")
-    public ResponseEntity<Question> nextRandomQuestion(
+    public ResponseEntity<Map<String, Object>> nextRandomQuestion(
             @PathVariable("sessionCode") String sessionCode,
-            @RequestParam("lastToUser") String lastToUser) {
+            @RequestBody Map<String, String> requestBody) {
 
-        if (lastToUser == null || lastToUser.isEmpty()) {
+        // Validar que el body contenga la clave "lastToUser"
+        if (requestBody == null || !requestBody.containsKey("lastToUser") || requestBody.get("lastToUser").isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
+
+        String lastToUser = requestBody.get("lastToUser");
 
         try {
             Question nextQuestion = gameSessionService.selectAndSetNextQuestion(sessionCode, lastToUser);
@@ -182,11 +203,25 @@ public class GameSessionController {
             // Enviar evento a todos los clientes conectados
             messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"update\"}");
 
-            return ResponseEntity.ok(nextQuestion);
+            Map<String, Object> response = new HashMap<>();
+            response.put("question", nextQuestion);
+            response.put("message", "Pregunta siguiente seleccionada");
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalStateException e) {
+            // Todas las preguntas han sido mostradas
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Se mostraron todas las preguntas");
+            response.put("allQuestionsShown", true);
+            return ResponseEntity.ok(response);
+
         } catch (IllegalArgumentException e) {
+            // Otros errores como sesión inválida
             return ResponseEntity.status(404).build();
         }
     }
+
+
 
     @GetMapping("/{sessionCode}/current-question")
     public ResponseEntity<Question> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
@@ -203,13 +238,29 @@ public class GameSessionController {
     }
 
     @PostMapping("/reset")
-    public ResponseEntity<String> resetGameData() {
+    public ResponseEntity<String> resetGameData(@RequestBody Map<String, String> requestBody) {
         try {
-            gameSessionService.resetGameData();
-            return ResponseEntity.ok("Game data has been reset successfully.");
+            // Obtener el código de sesión del cuerpo de la solicitud
+            String sessionCode = requestBody.get("sessionCode");
+            if (sessionCode == null || sessionCode.isEmpty()) {
+                return ResponseEntity.badRequest().body("El código de sesión es obligatorio.");
+            }
+
+            // Llamar al servicio para resetear los datos de la sesión
+            gameSessionService.resetGameData(sessionCode);
+            return ResponseEntity.ok("Los datos de la sesión con código " + sessionCode + " se han reiniciado correctamente.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to reset game data: " + e.getMessage());
+                    .body("No se pudieron reiniciar los datos del juego: " + e.getMessage());
         }
+    }
+
+
+    public ObjectMapper getObjectMapper() {
+        return objectMapper;
+    }
+
+    public void setObjectMapper(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
     }
 }

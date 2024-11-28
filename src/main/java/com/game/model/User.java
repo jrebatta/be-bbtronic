@@ -20,9 +20,10 @@ public class User implements Serializable {
     private String sessionToken;
 
     @ManyToOne
-    @JoinColumn(name = "game_session_id")
+    @JoinColumn(name = "game_session_id", nullable = true) // Puede ser nulo al inicio
     @JsonBackReference
     private GameSession gameSession;
+
 
     @Column(name = "ready", nullable = false)
     private boolean ready = false; // Valor predeterminado de 'false'
@@ -70,5 +71,11 @@ public class User implements Serializable {
 
     public void setReady(boolean ready) {
         this.ready = ready;
+    }
+
+    public void validateUsername() {
+        if (this.username == null || this.username.isEmpty()) {
+            throw new IllegalArgumentException("El nombre de usuario no puede estar vacío.");
+        }
     }
 }
