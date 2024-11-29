@@ -11,7 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,12 +64,6 @@ public class GameSessionController {
     }
 
 
-//    @MessageMapping("/updateQuestion/{sessionCode}")
-//    public void updateQuestion(@DestinationVariable String sessionCode) {
-//        // Enviar mensaje de actualización a todos los suscriptores
-//        messagingTemplate.convertAndSend("/topic/" + sessionCode, "update");
-//    }
-
     @GetMapping("/{sessionCode}")
     public ResponseEntity<?> getGameSession(@PathVariable("sessionCode") String sessionCode) {
         try {
@@ -123,10 +116,6 @@ public class GameSessionController {
         }
     }
 
-
-
-
-
     @GetMapping("/{sessionCode}/users")
     public ResponseEntity<?> getUsersInSession(@PathVariable("sessionCode") String sessionCode) {
         try {
@@ -175,7 +164,6 @@ public class GameSessionController {
         return ResponseEntity.ok(response);
     }
 
-
     @GetMapping("/{sessionCode}/check-all-ready")
     public ResponseEntity<Map<String, Object>> checkAllReady(@PathVariable("sessionCode") String sessionCode) {
         GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
@@ -192,7 +180,6 @@ public class GameSessionController {
 
         return ResponseEntity.ok(response);
     }
-
 
     @PostMapping("/{sessionCode}/next-random-question")
     public ResponseEntity<Map<String, Object>> nextRandomQuestion(
@@ -230,20 +217,14 @@ public class GameSessionController {
         }
     }
 
-
-
     @GetMapping("/{sessionCode}/current-question")
     public ResponseEntity<Question> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
-        GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
-        List<Question> orderedQuestions = gameSessionService.getQuestionsForSession(sessionCode);
-        int currentIndex = session.getCurrentQuestionIndex();
-
-        if (currentIndex < 0 || currentIndex >= orderedQuestions.size()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        try {
+            Question currentQuestion = gameSessionService.getCurrentQuestion(sessionCode);
+            return ResponseEntity.ok(currentQuestion);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
-
-        Question currentQuestion = orderedQuestions.get(currentIndex);
-        return ResponseEntity.ok(currentQuestion);
     }
 
     @PostMapping("/reset")
@@ -262,14 +243,5 @@ public class GameSessionController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("No se pudieron reiniciar los datos del juego: " + e.getMessage());
         }
-    }
-
-
-    public ObjectMapper getObjectMapper() {
-        return objectMapper;
-    }
-
-    public void setObjectMapper(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
     }
 }

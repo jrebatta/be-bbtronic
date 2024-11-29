@@ -10,5 +10,4 @@ import java.util.Optional;
 public interface GameSessionRepository extends JpaRepository<GameSession, Long> {
     // Define el método personalizado para encontrar una sesión por su código
     Optional<GameSession> findBySessionCode(String sessionCode);
-
 }

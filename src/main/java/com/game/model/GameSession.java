@@ -1,7 +1,7 @@
 package com.game.model;
 
-import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,6 +12,8 @@ import java.util.Set;
 @Table(name = "game_session")
 public class GameSession {
 
+    // --- Campos privados ---
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,15 +21,12 @@ public class GameSession {
     private String sessionCode; // Código de 4 dígitos
     private LocalDateTime createdAt;
 
-    // Nombre del creador de la sesión
-    private String creatorName;
-
+    private String creatorName; // Nombre del creador de la sesión
     private boolean gameStarted = false;
 
     @Column(nullable = false, columnDefinition = "integer default 0")
     private int currentQuestionIndex = 0;
 
-    // Lista de preguntas de la sesión
     @OneToMany(mappedBy = "gameSession", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Question> questions = new ArrayList<>();
 
@@ -35,11 +34,19 @@ public class GameSession {
     @JsonManagedReference
     private List<User> users = new ArrayList<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "shown_questions", joinColumns = @JoinColumn(name = "session_id"))
+    @Column(name = "question_id")
+    private Set<Long> shownQuestions = new HashSet<>();
+
+    // --- Constructor ---
+
     public GameSession() {
         this.createdAt = LocalDateTime.now();
     }
 
-    // Getters y Setters
+    // --- Getters y Setters ---
+
     public Long getId() {
         return id;
     }
@@ -80,15 +87,6 @@ public class GameSession {
         this.gameStarted = gameStarted;
     }
 
-    public List<User> getUsers() {
-        return users;
-    }
-
-    public void addUser(User user) {
-        this.users.add(user);
-        user.setGameSession(this); // Enlace bidireccional
-    }
-
     public int getCurrentQuestionIndex() {
         return currentQuestionIndex;
     }
@@ -97,20 +95,21 @@ public class GameSession {
         this.currentQuestionIndex = currentQuestionIndex;
     }
 
-    // Métodos para gestionar las preguntas de la sesión
     public List<Question> getQuestions() {
         return questions;
     }
 
-    public void addQuestion(Question question) {
-        this.questions.add(question);
-        question.setGameSession(this); // Enlace bidireccional
+    public void setQuestions(List<Question> questions) {
+        this.questions = questions;
     }
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "shown_questions", joinColumns = @JoinColumn(name = "session_id"))
-    @Column(name = "question_id")
-    private Set<Long> shownQuestions = new HashSet<>();
+    public List<User> getUsers() {
+        return users;
+    }
+
+    public void setUsers(List<User> users) {
+        this.users = users;
+    }
 
     public Set<Long> getShownQuestions() {
         return shownQuestions;
@@ -118,5 +117,17 @@ public class GameSession {
 
     public void setShownQuestions(Set<Long> shownQuestions) {
         this.shownQuestions = shownQuestions;
+    }
+
+    // --- Métodos personalizados ---
+
+    public void addUser(User user) {
+        this.users.add(user);
+        user.setGameSession(this); // Enlace bidireccional
+    }
+
+    public void addQuestion(Question question) {
+        this.questions.add(question);
+        question.setGameSession(this); // Enlace bidireccional
     }
 }

@@ -8,6 +8,8 @@ import java.io.Serializable;
 @Table(name = "question")
 public class Question implements Serializable {
 
+    // --- Campos privados ---
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -16,12 +18,17 @@ public class Question implements Serializable {
     private String toUser;
     private String question;
 
+    private boolean anonymous; // Indica si la pregunta es anónima
+
     @ManyToOne
     @JoinColumn(name = "game_session_id")
-    @JsonIgnore  // Ignorar la serialización de esta referencia
+    @JsonIgnore // Ignorar la serialización de esta referencia
     private GameSession gameSession;
 
-    public Question() {}
+    // --- Constructores ---
+
+    public Question() {
+    }
 
     public Question(String fromUser, String toUser, String question) {
         this.fromUser = fromUser;
@@ -29,13 +36,14 @@ public class Question implements Serializable {
         this.question = question;
     }
 
-    // Getters y Setters
+    // --- Getters y Setters ---
+
     public Long getId() {
         return id;
     }
 
     public String getFromUser() {
-        return anonymous ? "Anónimo" : fromUser;  // Devuelve "Anónimo" si es true
+        return anonymous ? "Anónimo" : fromUser; // Devuelve "Anónimo" si es true
     }
 
     public void setFromUser(String fromUser) {
@@ -58,23 +66,19 @@ public class Question implements Serializable {
         this.question = question;
     }
 
-    public GameSession getGameSession() {
-        return gameSession;
-    }
-
-    public void setGameSession(GameSession gameSession) {
-        this.gameSession = gameSession;
-    }
-
-    // Otros atributos
-    private boolean anonymous;
-
-    // Getters y setters
     public boolean isAnonymous() {
         return anonymous;
     }
 
     public void setAnonymous(boolean anonymous) {
         this.anonymous = anonymous;
+    }
+
+    public GameSession getGameSession() {
+        return gameSession;
+    }
+
+    public void setGameSession(GameSession gameSession) {
+        this.gameSession = gameSession;
     }
 }

@@ -2,12 +2,15 @@ package com.game.model;
 
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonBackReference;
+
 import java.io.Serializable;
 import java.util.UUID;
 
 @Entity
 @Table(name = "users")
 public class User implements Serializable {
+
+    // --- Campos privados ---
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -19,16 +22,18 @@ public class User implements Serializable {
     @Column(name = "session_token", unique = true)
     private String sessionToken;
 
+    @Column(name = "ready", nullable = false)
+    private boolean ready = false; // Valor predeterminado: no está listo
+
     @ManyToOne
-    @JoinColumn(name = "game_session_id", nullable = true) // Puede ser nulo al inicio
+    @JoinColumn(name = "game_session_id", nullable = true) // Puede ser nulo inicialmente
     @JsonBackReference
     private GameSession gameSession;
 
+    // --- Constructores ---
 
-    @Column(name = "ready", nullable = false)
-    private boolean ready = false; // Valor predeterminado de 'false'
-
-    public User() {}
+    public User() {
+    }
 
     public User(String username) {
         this.username = username;
@@ -36,7 +41,8 @@ public class User implements Serializable {
         this.ready = false; // Inicialmente, el usuario no está listo
     }
 
-    // Getters y Setters
+    // --- Getters y Setters ---
+
     public Long getId() {
         return id;
     }
@@ -57,14 +63,6 @@ public class User implements Serializable {
         this.sessionToken = sessionToken;
     }
 
-    public GameSession getGameSession() {
-        return gameSession;
-    }
-
-    public void setGameSession(GameSession gameSession) {
-        this.gameSession = gameSession;
-    }
-
     public boolean isReady() {
         return ready;
     }
@@ -73,9 +71,11 @@ public class User implements Serializable {
         this.ready = ready;
     }
 
-    public void validateUsername() {
-        if (this.username == null || this.username.isEmpty()) {
-            throw new IllegalArgumentException("El nombre de usuario no puede estar vacío.");
-        }
+    public GameSession getGameSession() {
+        return gameSession;
+    }
+
+    public void setGameSession(GameSession gameSession) {
+        this.gameSession = gameSession;
     }
 }

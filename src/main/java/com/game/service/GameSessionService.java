@@ -39,33 +39,6 @@ public class GameSessionService {
 
     }
 
-    public Map<String, String> joinGameSession(String sessionCode, String username) {
-        // Validar que la sesión exista
-        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
-                .orElseThrow(() -> new IllegalArgumentException("El código de sesión es inválido."));
-
-        // Validar que el usuario no exista ya en la sesión
-        if (session.getUsers().stream().anyMatch(user -> user.getUsername().equals(username))) {
-            throw new IllegalArgumentException("El usuario ya está en la sesión.");
-        }
-
-        // Crear un nuevo usuario
-        User user = userRepository.findByUsername(username)
-                .orElseGet(() -> userRepository.save(new User(username)));
-
-        // Asociar el usuario a la sesión
-        user.setGameSession(session);
-        userRepository.save(user);
-
-        session.addUser(user);
-        gameSessionRepository.save(session);
-
-        // Respuesta de éxito
-        Map<String, String> response = new HashMap<>();
-        response.put("sessionToken", user.getSessionToken());
-        return response;
-    }
-
     public void resetGameData(String sessionCode) {
         // Ejecuta el procedimiento almacenado con el código de sesión proporcionado
         String sql = "CALL reset_game_data(?);";
@@ -94,8 +67,6 @@ public class GameSessionService {
 
         return savedSession;
     }
-
-
 
 
     // Generar un código de 4 dígitos
@@ -153,9 +124,18 @@ public class GameSessionService {
     public void startGame(String sessionCode) {
         GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
                 .orElseThrow(() -> new IllegalArgumentException("Código de sesión inválido"));
-        session.setGameStarted(true); // Asegúrate de tener un campo gameStarted en GameSession
-        gameSessionRepository.save(session);
+        session.setGameStarted(true);
+
+        // Registrar la primera pregunta en shownQuestions
+        if (!session.getQuestions().isEmpty()) {
+            Question firstQuestion = session.getQuestions().getFirst();
+            session.getShownQuestions().add(firstQuestion.getId());
+            System.out.println("Primera pregunta registrada en shownQuestions: " + firstQuestion.getId());
+        }
+
+        gameSessionRepository.save(session); // Guardar los cambios
     }
+
 
 
     public boolean checkAllUsersReady(String sessionCode) {
@@ -163,25 +143,6 @@ public class GameSessionService {
                 .orElseThrow(() -> new IllegalArgumentException("Código de sesión inválido"));
         return session.getUsers().stream().allMatch(User::isReady);
     }
-
-
-    public void nextQuestion(String sessionCode) {
-        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
-                .orElseThrow(() -> new IllegalArgumentException("Código de sesión inválido"));
-
-        List<Question> orderedQuestions = session.getQuestions().stream()
-                .sorted(Comparator.comparingLong(Question::getId))
-                .toList();
-
-        int currentIndex = session.getCurrentQuestionIndex();
-
-        // Verifica si hay una siguiente pregunta en la lista ordenada
-        if (currentIndex < orderedQuestions.size() - 1) {
-            session.setCurrentQuestionIndex(currentIndex + 1);
-            gameSessionRepository.save(session);
-        }
-    }
-
 
 
     // Selecciona la siguiente pregunta aleatoria y sincroniza en la sesión
@@ -194,34 +155,78 @@ public class GameSessionService {
             throw new IllegalArgumentException("No hay preguntas en la sesión");
         }
 
-        // Filtra las preguntas para no repetir `toUser` ni preguntas ya mostradas
+        // Filtrar preguntas no mostradas y que no estén dirigidas al último usuario
         List<Question> filteredQuestions = questions.stream()
-                .filter(q -> !q.getToUser().equals(lastToUser) && !gameSession.getShownQuestions().contains(q.getId()))
+                .filter(q -> !gameSession.getShownQuestions().contains(q.getId()) && !q.getToUser().equals(lastToUser))
                 .collect(Collectors.toList());
 
-        // Si no hay preguntas en filteredQuestions, usamos el conjunto completo excluyendo `lastToUser`
+        // Si no hay preguntas disponibles en el filtro inicial, considerar todas las no mostradas
         if (filteredQuestions.isEmpty()) {
             filteredQuestions = questions.stream()
-                    .filter(q -> !q.getToUser().equals(lastToUser))
+                    .filter(q -> !gameSession.getShownQuestions().contains(q.getId()))
                     .toList();
         }
 
-        // Si todavía no hay preguntas, esto indica que todas las preguntas se han mostrado.
+        // Si todavía no hay preguntas disponibles
         if (filteredQuestions.isEmpty()) {
             messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"allQuestionsShown\"}");
-            throw new IllegalStateException("Se mostraron todas las preguntas");
+            throw new IllegalStateException("Todas las preguntas ya fueron mostradas");
         }
 
-        // Selecciona una pregunta aleatoria de las preguntas filtradas
+        // Seleccionar una pregunta aleatoria
         Random random = new Random();
         Question nextQuestion = filteredQuestions.get(random.nextInt(filteredQuestions.size()));
 
-        // Actualiza la sesión con la pregunta actual y marca la pregunta como mostrada
-        gameSession.setCurrentQuestionIndex(questions.indexOf(nextQuestion));
-        gameSession.getShownQuestions().add(nextQuestion.getId());
-        gameSessionRepository.save(gameSession);
+        // Validar y eliminar duplicados en shownQuestions
+        Set<Long> uniqueQuestions = new HashSet<>(gameSession.getShownQuestions());
+        gameSession.setShownQuestions(uniqueQuestions); // Asegurar que no haya duplicados
+
+        // Registrar la pregunta como mostrada
+        if (!uniqueQuestions.contains(nextQuestion.getId())) {
+            uniqueQuestions.add(nextQuestion.getId());
+            System.out.println("Pregunta registrada como mostrada: " + nextQuestion.getId());
+        } else {
+            System.out.println("Pregunta ya estaba registrada: " + nextQuestion.getId());
+        }
+
+        gameSessionRepository.save(gameSession); // Persistir cambios en la base de datos
 
         return nextQuestion;
+    }
+
+
+    public List<Question> getQuestionsForSession(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+
+        // Obtiene las preguntas ordenadas por id (ascendente) para la sesión específica
+        return session.getQuestions().stream()
+                .sorted(Comparator.comparingLong(Question::getId))
+                .collect(Collectors.toList());
+    }
+
+    public Question getCurrentQuestion(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+        List<Question> orderedQuestions = getQuestionsForSession(sessionCode);
+        int currentIndex = session.getCurrentQuestionIndex();
+
+        if (currentIndex < 0 || currentIndex >= orderedQuestions.size()) {
+            throw new IllegalArgumentException("Índice fuera de rango para la pregunta actual.");
+        }
+
+        Question currentQuestion = orderedQuestions.get(currentIndex);
+
+        // Verificar y registrar de forma segura que la pregunta no se registre múltiples veces
+        synchronized (this) {
+            if (!session.getShownQuestions().contains(currentQuestion.getId())) {
+                session.getShownQuestions().add(currentQuestion.getId());
+                gameSessionRepository.save(session); // Persistir cambios
+                System.out.println("Pregunta registrada en shownQuestions: " + currentQuestion.getId());
+            } else {
+                System.out.println("La pregunta ya estaba registrada: " + currentQuestion.getId());
+            }
+        }
+
+        return currentQuestion;
     }
 
 
@@ -238,12 +243,4 @@ public class GameSessionService {
         questionRepository.save(question);
     }
 
-    public List<Question> getQuestionsForSession(String sessionCode) {
-        GameSession session = getGameSessionByCode(sessionCode);
-
-        // Obtiene las preguntas ordenadas por id (ascendente) para la sesión específica
-        return session.getQuestions().stream()
-                .sorted(Comparator.comparingLong(Question::getId))
-                .collect(Collectors.toList());
-    }
 }

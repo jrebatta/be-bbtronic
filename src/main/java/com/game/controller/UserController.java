@@ -29,7 +29,6 @@ public class UserController {
         return ResponseEntity.ok(allUsers);
     }
 
-
     @GetMapping("/register")
     public ResponseEntity<Map<String, String>> registerUser(@RequestParam("username") String username) {
         try {
@@ -45,7 +44,6 @@ public class UserController {
         }
     }
 
-
     @GetMapping("/online")
     public ResponseEntity<List<Map<String, String>>> getOnlineUsers() {
         List<User> onlineUsers = userService.getAllUsers();
@@ -59,7 +57,6 @@ public class UserController {
 
         return ResponseEntity.ok(response);
     }
-
 
     @DeleteMapping("/logout")
     public ResponseEntity<String> logoutUser(@RequestParam("sessionToken") String sessionToken) {
@@ -79,5 +76,4 @@ public class UserController {
         System.out.println("Usuario marcado como listo: " + username);
         return ResponseEntity.ok().build();
     }
-
 }
