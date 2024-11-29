@@ -41,6 +41,9 @@ public class User implements Serializable {
         this.ready = false; // Inicialmente, el usuario no está listo
     }
 
+    public User(String user, boolean b) {
+    }
+
     // --- Getters y Setters ---
 
     public Long getId() {
