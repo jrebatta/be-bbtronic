@@ -2,15 +2,19 @@ package com.game.model;
 
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.io.Serializable;
 import java.util.UUID;
 
 @Entity
 @Table(name = "users")
+@Getter
+@Setter
+@NoArgsConstructor // Genera un constructor sin argumentos
 public class User implements Serializable {
-
-    // --- Campos privados ---
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,55 +34,10 @@ public class User implements Serializable {
     @JsonBackReference
     private GameSession gameSession;
 
-    // --- Constructores ---
-
-    public User() {
-    }
-
+    // --- Constructor personalizado ---
     public User(String username) {
         this.username = username;
         this.sessionToken = UUID.randomUUID().toString();
         this.ready = false; // Inicialmente, el usuario no está listo
-    }
-
-    public User(String user, boolean b) {
-    }
-
-    // --- Getters y Setters ---
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getSessionToken() {
-        return sessionToken;
-    }
-
-    public void setSessionToken(String sessionToken) {
-        this.sessionToken = sessionToken;
-    }
-
-    public boolean isReady() {
-        return ready;
-    }
-
-    public void setReady(boolean ready) {
-        this.ready = ready;
-    }
-
-    public GameSession getGameSession() {
-        return gameSession;
-    }
-
-    public void setGameSession(GameSession gameSession) {
-        this.gameSession = gameSession;
     }
 }

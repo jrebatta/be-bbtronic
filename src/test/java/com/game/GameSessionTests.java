@@ -3,7 +3,6 @@ package com.game;
 import com.game.model.GameSession;
 import com.game.model.User;
 import com.game.repository.GameSessionRepository;
-import com.game.repository.QuestionRepository;
 import com.game.repository.UserRepository;
 import com.game.service.GameSessionService;
 import org.junit.jupiter.api.Assertions;
