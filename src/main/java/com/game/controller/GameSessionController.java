@@ -116,24 +116,6 @@ public class GameSessionController {
         }
     }
 
-    @GetMapping("/{sessionCode}/users")
-    public ResponseEntity<?> getUsersInSession(@PathVariable("sessionCode") String sessionCode) {
-        try {
-            GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
-            List<User> users = gameSessionService.getUsersInSession(sessionCode);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("creator", session.getCreatorName());
-            response.put("users", users);
-
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
-        }
-    }
-
     @PostMapping("/{sessionCode}/send-question")
     public ResponseEntity<?> sendQuestion(
             @PathVariable("sessionCode") String sessionCode,
