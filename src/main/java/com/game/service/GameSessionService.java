@@ -242,5 +242,15 @@ public class GameSessionService {
 
         questionRepository.save(question);
     }
+    public int getTotalQuestions(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+        return session.getQuestions().size();
+    }
+
+    public int getCurrentQuestionNumber(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+        return session.getCurrentQuestionIndex() + 1; // Asumiendo que es un índice base 0
+    }
+
 
 }

@@ -168,7 +168,6 @@ public class GameSessionController {
             @PathVariable("sessionCode") String sessionCode,
             @RequestBody Map<String, String> requestBody) {
 
-        // Validar que el body contenga la clave "lastToUser"
         if (requestBody == null || !requestBody.containsKey("lastToUser") || requestBody.get("lastToUser").isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
@@ -177,37 +176,45 @@ public class GameSessionController {
 
         try {
             Question nextQuestion = gameSessionService.selectAndSetNextQuestion(sessionCode, lastToUser);
-
-            // Enviar evento a todos los clientes conectados
-            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"update\"}");
+            int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
+            int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
 
             Map<String, Object> response = new HashMap<>();
             response.put("question", nextQuestion);
+            response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
             response.put("message", "Pregunta siguiente seleccionada");
+
             return ResponseEntity.ok(response);
 
         } catch (IllegalStateException e) {
-            // Todas las preguntas han sido mostradas
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Se mostraron todas las preguntas");
             response.put("allQuestionsShown", true);
             return ResponseEntity.ok(response);
 
         } catch (IllegalArgumentException e) {
-            // Otros errores como sesión inválida
             return ResponseEntity.status(404).build();
         }
     }
 
+
     @GetMapping("/{sessionCode}/current-question")
-    public ResponseEntity<Question> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
+    public ResponseEntity<Map<String, Object>> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
         try {
             Question currentQuestion = gameSessionService.getCurrentQuestion(sessionCode);
-            return ResponseEntity.ok(currentQuestion);
+            int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
+            int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("question", currentQuestion);
+            response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
+
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
     }
+
 
     @PostMapping("/reset")
     public ResponseEntity<String> resetGameData(@RequestBody Map<String, String> requestBody) {
