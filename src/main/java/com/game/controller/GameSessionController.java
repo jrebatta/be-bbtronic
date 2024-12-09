@@ -163,6 +163,33 @@ public class GameSessionController {
         return ResponseEntity.ok(response);
     }
 
+    private Map<String, Object> generateQuestionResponse(Question question, int currentQuestionNumber, int totalQuestions, String message) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("question", question);
+        response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
+        if (message != null && !message.isEmpty()) {
+            response.put("message", message);
+        }
+        return response;
+    }
+
+
+    @GetMapping("/{sessionCode}/current-question")
+    public ResponseEntity<Map<String, Object>> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
+        try {
+            Question currentQuestion = gameSessionService.getCurrentQuestion(sessionCode);
+            int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
+            int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
+
+            Map<String, Object> response = generateQuestionResponse(currentQuestion, currentQuestionNumber, totalQuestions, null);
+
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+
+
     @PostMapping("/{sessionCode}/next-random-question")
     public ResponseEntity<Map<String, Object>> nextRandomQuestion(
             @PathVariable("sessionCode") String sessionCode,
@@ -179,10 +206,7 @@ public class GameSessionController {
             int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
             int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("question", nextQuestion);
-            response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
-            response.put("message", "Pregunta siguiente seleccionada");
+            Map<String, Object> response = generateQuestionResponse(nextQuestion, currentQuestionNumber, totalQuestions, "Pregunta siguiente seleccionada");
 
             return ResponseEntity.ok(response);
 
@@ -196,25 +220,6 @@ public class GameSessionController {
             return ResponseEntity.status(404).build();
         }
     }
-
-
-    @GetMapping("/{sessionCode}/current-question")
-    public ResponseEntity<Map<String, Object>> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
-        try {
-            Question currentQuestion = gameSessionService.getCurrentQuestion(sessionCode);
-            int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
-            int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("question", currentQuestion);
-            response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
-
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
-    }
-
 
     @PostMapping("/reset")
     public ResponseEntity<String> resetGameData(@RequestBody Map<String, String> requestBody) {

@@ -1,6 +1,8 @@
 package com.game.service;
 
+import com.game.model.GameSession;
 import com.game.model.User;
+import com.game.repository.GameSessionRepository;
 import com.game.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,10 +15,12 @@ import java.util.Optional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final GameSessionRepository gameSessionRepository;
 
     @Autowired
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, GameSessionRepository gameSessionRepository) {
         this.userRepository = userRepository;
+        this.gameSessionRepository = gameSessionRepository;
     }
 
     // Método para registrar usuario, validando si ya existe
@@ -35,13 +39,28 @@ public class UserService {
 
     // Método para cerrar la sesión del usuario y eliminarlo de la base de datos
     public boolean logoutUser(String sessionToken) {
+        // Buscar al usuario por su sessionToken
         Optional<User> user = userRepository.findBySessionToken(sessionToken);
+
         if (user.isPresent()) {
-            userRepository.delete(user.get());
-            return true;
+            User foundUser = user.get();
+
+            // Eliminar el usuario de cualquier sesión de juego si está presente
+            Optional<GameSession> gameSession = gameSessionRepository.findByUsersContaining(foundUser);
+            gameSession.ifPresent(session -> {
+                session.getUsers().remove(foundUser); // Eliminar el usuario de la sesión
+                gameSessionRepository.save(session); // Guardar los cambios en la sesión
+            });
+
+            // Eliminar el usuario de la tabla de usuarios
+            userRepository.delete(foundUser);
+
+            return true; // Operación exitosa
         }
-        return false;
+
+        return false; // Usuario no encontrado
     }
+
 
     // Método que borra todos los usuarios al iniciar la aplicación
     @PostConstruct

@@ -179,20 +179,18 @@ public class GameSessionService {
 
         // Validar y eliminar duplicados en shownQuestions
         Set<Long> uniqueQuestions = new HashSet<>(gameSession.getShownQuestions());
-        gameSession.setShownQuestions(uniqueQuestions); // Asegurar que no haya duplicados
+        uniqueQuestions.add(nextQuestion.getId());
+        gameSession.setShownQuestions(uniqueQuestions);
 
-        // Registrar la pregunta como mostrada
-        if (!uniqueQuestions.contains(nextQuestion.getId())) {
-            uniqueQuestions.add(nextQuestion.getId());
-            System.out.println("Pregunta registrada como mostrada: " + nextQuestion.getId());
-        } else {
-            System.out.println("Pregunta ya estaba registrada: " + nextQuestion.getId());
-        }
+        // Actualizar el índice de la pregunta actual
+        gameSession.setCurrentQuestionIndex(gameSession.getShownQuestions().size() - 1);
 
-        gameSessionRepository.save(gameSession); // Persistir cambios en la base de datos
+        // Persistir cambios en la base de datos
+        gameSessionRepository.save(gameSession);
 
         return nextQuestion;
     }
+
 
 
     public List<Question> getQuestionsForSession(String sessionCode) {
@@ -242,15 +240,15 @@ public class GameSessionService {
 
         questionRepository.save(question);
     }
+
+    public int getCurrentQuestionNumber(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+        return session.getCurrentQuestionIndex() + 1; // Basado en índice 0
+    }
+
     public int getTotalQuestions(String sessionCode) {
         GameSession session = getGameSessionByCode(sessionCode);
         return session.getQuestions().size();
     }
-
-    public int getCurrentQuestionNumber(String sessionCode) {
-        GameSession session = getGameSessionByCode(sessionCode);
-        return session.getCurrentQuestionIndex() + 1; // Asumiendo que es un índice base 0
-    }
-
 
 }
