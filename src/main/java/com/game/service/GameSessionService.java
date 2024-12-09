@@ -3,9 +3,11 @@ package com.game.service;
 import com.game.model.GameSession;
 import com.game.model.Question;
 import com.game.model.User;
+import com.game.model.YoNuncaNunca;
 import com.game.repository.GameSessionRepository;
 import com.game.repository.QuestionRepository;
 import com.game.repository.UserRepository;
+import com.game.repository.YoNuncaNuncaRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,18 +27,22 @@ public class GameSessionService {
     private final QuestionRepository questionRepository;
     private final JdbcTemplate jdbcTemplate = null;
     private final SimpMessagingTemplate messagingTemplate; // Declaración del campo
+    private final YoNuncaNuncaRepository yoNuncaNuncaRepository;
+    private final Map<String, List<YoNuncaNunca>> sessionQuestions = new HashMap<>();
+    private final Map<String, List<User>> sessionUsers = new HashMap<>();
+
 
 
     @Autowired
     public GameSessionService(GameSessionRepository gameSessionRepository,
                               UserRepository userRepository,
                               QuestionRepository questionRepository,
-                              SimpMessagingTemplate messagingTemplate) { // Inyección del template
+                              SimpMessagingTemplate messagingTemplate, YoNuncaNuncaRepository yoNuncaNuncaRepository) { // Inyección del template
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
         this.messagingTemplate = messagingTemplate; // Inicialización del template
-
+        this.yoNuncaNuncaRepository = yoNuncaNuncaRepository;
     }
 
     public void resetGameData(String sessionCode) {
@@ -249,6 +255,56 @@ public class GameSessionService {
     public int getTotalQuestions(String sessionCode) {
         GameSession session = getGameSessionByCode(sessionCode);
         return session.getQuestions().size();
+    }
+
+    public void startYoNuncaNunca(String sessionCode) {
+        // Validar la sesión
+        GameSession session = getGameSessionByCode(sessionCode);
+
+        // Cargar preguntas y usuarios
+        List<YoNuncaNunca> questions = yoNuncaNuncaRepository.findAll(); // Cambia según el filtro necesario
+        List<User> users = getUsersInSession(sessionCode);
+
+        if (questions.isEmpty() || users.isEmpty()) {
+            throw new IllegalStateException("No hay suficientes preguntas o usuarios para iniciar Yo Nunca Nunca.");
+        }
+
+        Collections.shuffle(questions);
+        Collections.shuffle(users);
+
+        sessionQuestions.put(sessionCode, new ArrayList<>(questions));
+        sessionUsers.put(sessionCode, new ArrayList<>(users));
+    }
+
+
+
+    public Map<String, Object> getNextYoNuncaNunca(String sessionCode) {
+        // Obtener o inicializar las preguntas de la sesión
+        sessionQuestions.putIfAbsent(sessionCode, yoNuncaNuncaRepository.findAll());
+        sessionUsers.putIfAbsent(sessionCode, getUsersInSession(sessionCode));
+
+        List<YoNuncaNunca> questions = sessionQuestions.get(sessionCode);
+        List<User> users = sessionUsers.get(sessionCode);
+
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("No hay más preguntas disponibles.");
+        }
+
+        if (users.isEmpty()) {
+            // Reiniciar la lista de usuarios si todos ya fueron asignados
+            sessionUsers.put(sessionCode, getUsersInSession(sessionCode));
+            users = sessionUsers.get(sessionCode);
+        }
+
+        // Seleccionar una pregunta y un usuario aleatoriamente
+        YoNuncaNunca question = questions.removeFirst(); // Tomar la primera pregunta
+        User user = users.removeFirst(); // Tomar el primer usuario
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("question", question);
+        result.put("user", user);
+
+        return result;
     }
 
 }

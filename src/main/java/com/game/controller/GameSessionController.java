@@ -238,4 +238,40 @@ public class GameSessionController {
                     .body("No se pudieron reiniciar los datos del juego: " + e.getMessage());
         }
     }
+
+    @PostMapping("/{sessionCode}/yo-nunca-nunca/start")
+    public ResponseEntity<?> startYoNuncaNunca(@PathVariable String sessionCode) {
+        try {
+            // Iniciar el modo "Yo Nunca Nunca" en la sesión
+            gameSessionService.startYoNuncaNunca(sessionCode);
+
+            // Notificar a todos los usuarios que se inició "Yo Nunca Nunca"
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"yoNuncaNuncaStarted\"}");
+            return ResponseEntity.ok(Map.of("message", "Yo Nunca Nunca iniciado correctamente."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al iniciar Yo Nunca Nunca: " + e.getMessage()));
+        }
+    }
+
+
+    @GetMapping("/{sessionCode}/next-yo-nunca-nunca")
+    public ResponseEntity<?> getNextYoNuncaNuncaQuestion(@PathVariable String sessionCode) {
+        try {
+            // Obtener pregunta y usuario aleatorios desde el servicio
+            Map<String, Object> nextQuestionData = gameSessionService.getNextYoNuncaNunca(sessionCode);
+
+            // Responder con la pregunta y el usuario asignado
+            return ResponseEntity.ok(nextQuestionData);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body("No hay más preguntas disponibles.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al obtener la siguiente pregunta: " + e.getMessage());
+        }
+    }
+
+
+
 }
