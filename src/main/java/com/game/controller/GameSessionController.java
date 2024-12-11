@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.model.GameSession;
 import com.game.model.Question;
 import com.game.model.User;
+import com.game.model.YoNuncaNunca;
 import com.game.service.GameSessionService;
 import com.game.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -258,12 +259,14 @@ public class GameSessionController {
 
 
     @GetMapping("/{sessionCode}/next-yo-nunca-nunca")
-    public ResponseEntity<?> getNextYoNuncaNuncaQuestion(@PathVariable String sessionCode) {
+    public ResponseEntity<?> getNextYoNuncaNuncaQuestion(
+            @PathVariable String sessionCode,
+            @RequestParam String tipo) { // Se agrega el parámetro tipo
         try {
-            // Obtener pregunta y usuario aleatorios desde el servicio
-            Map<String, Object> nextQuestionData = gameSessionService.getNextYoNuncaNunca(sessionCode);
+            // Obtener la siguiente pregunta filtrada por tipo desde el servicio
+            YoNuncaNunca nextQuestionData = gameSessionService.getNextYoNuncaNunca(sessionCode, tipo);
 
-            // Responder con la pregunta y el usuario asignado
+            // Responder con la pregunta
             return ResponseEntity.ok(nextQuestionData);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.NO_CONTENT).body("No hay más preguntas disponibles.");
@@ -272,6 +275,111 @@ public class GameSessionController {
         }
     }
 
+    @PostMapping("/{sessionCode}/quien-es-mas-probable/start")
+    public ResponseEntity<?> startQuienEsMasProbable(@PathVariable String sessionCode) {
+        try {
+            // Inicia el juego
+            gameSessionService.startQuienEsMasProbable(sessionCode);
+
+            // Notificar a los usuarios
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"quienEsMasProbableStarted\"}");
+
+            // Respuesta exitosa
+            return ResponseEntity.ok(Map.of("message", "Quien Es Más Probable iniciado correctamente."));
+        } catch (IllegalArgumentException e) {
+            // Log para argumentos inválidos
+            System.err.println("Error de argumento: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            // Log para errores internos
+            System.err.println("Error interno al iniciar el juego: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "No se pudo iniciar el juego: " + e.getMessage()));
+        }
+    }
+
+
+
+    @GetMapping("/{sessionCode}/next-quien-es-mas-probable")
+    public ResponseEntity<?> getNextQuienEsMasProbable(
+            @PathVariable String sessionCode,
+            @RequestParam String tipo) {
+        try {
+            String questionText = gameSessionService.getNextQuienEsMasProbable(sessionCode, tipo);
+            return ResponseEntity.ok(questionText);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al obtener la siguiente pregunta: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{sessionCode}/vote")
+    public ResponseEntity<?> registerVote(
+            @PathVariable String sessionCode,
+            @RequestBody Map<String, String> voteData) {
+        try {
+            // Obtener los datos del votante y del usuario por quien se vota
+            String votingUser = voteData.get("votingUser");
+            String votedUser = voteData.get("votedUser");
+
+            // Validar que ambos datos estén presentes
+            if (votingUser == null || votingUser.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El usuario que está votando no puede estar vacío."));
+            }
+            if (votedUser == null || votedUser.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El usuario por quien se vota no puede estar vacío."));
+            }
+
+            // Registrar el voto en el servicio
+            gameSessionService.registerVote(sessionCode, votingUser, votedUser);
+            return ResponseEntity.ok(Map.of("message", "Voto registrado."));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Error al registrar el voto: " + e.getMessage()));
+        }
+    }
+
+
+    // Obtener resultados de la votación
+    @GetMapping("/{sessionCode}/vote-results")
+    public ResponseEntity<?> getVoteResults(@PathVariable String sessionCode) {
+        try {
+            String winner = gameSessionService.getVoteResults(sessionCode);
+            return ResponseEntity.ok(Map.of("winner", winner));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Verificar si todos los usuarios han votado
+    @GetMapping("/{sessionCode}/check-all-voted")
+    public ResponseEntity<?> checkAllUsersVoted(@PathVariable String sessionCode) {
+        try {
+            boolean allVoted = gameSessionService.checkAllUsersVoted(sessionCode);
+            return ResponseEntity.ok(Map.of("allVoted", allVoted));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al verificar los votos: " + e.getMessage()));
+        }
+    }
+
+    // Limpiar votos después de la pregunta
+    @PostMapping("/{sessionCode}/clear-votes")
+    public ResponseEntity<?> clearVotes(@PathVariable String sessionCode) {
+        try {
+            gameSessionService.clearVotes(sessionCode);
+            return ResponseEntity.ok(Map.of("message", "Votos limpiados."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
 
 
 }

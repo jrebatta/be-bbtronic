@@ -12,7 +12,7 @@ import java.io.Serializable;
 @Table(name = "question")
 @Getter
 @Setter
-@NoArgsConstructor // Genera un constructor sin argumentos
+@NoArgsConstructor
 public class Question implements Serializable {
 
     @Id
@@ -30,13 +30,4 @@ public class Question implements Serializable {
     @JsonIgnore // Ignorar la serialización de esta referencia
     private GameSession gameSession;
 
-    public Question(String fromUser, String toUser, String question) {
-        this.fromUser = fromUser;
-        this.toUser = toUser;
-        this.question = question;
-    }
-
-    public String getFromUser() {
-        return anonymous ? "Anónimo" : fromUser; // Sobrescribimos el getter para este caso específico
-    }
 }

@@ -1,13 +1,7 @@
 package com.game.service;
 
-import com.game.model.GameSession;
-import com.game.model.Question;
-import com.game.model.User;
-import com.game.model.YoNuncaNunca;
-import com.game.repository.GameSessionRepository;
-import com.game.repository.QuestionRepository;
-import com.game.repository.UserRepository;
-import com.game.repository.YoNuncaNuncaRepository;
+import com.game.model.*;
+import com.game.repository.*;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,10 +20,18 @@ public class GameSessionService {
     private final UserRepository userRepository;
     private final QuestionRepository questionRepository;
     private final JdbcTemplate jdbcTemplate = null;
-    private final SimpMessagingTemplate messagingTemplate; // Declaración del campo
+    private final SimpMessagingTemplate messagingTemplate;
     private final YoNuncaNuncaRepository yoNuncaNuncaRepository;
-    private final Map<String, List<YoNuncaNunca>> sessionQuestions = new HashMap<>();
+    private final QuienEsMasProbableRepository quienEsMasProbableRepository;
+
+    private final Map<String, List<YoNuncaNunca>> yoNuncaNuncaQuestions = new HashMap<>();
+    private final Map<String, List<QuienEsMasProbable>> quienEsMasProbableQuestions = new HashMap<>();
     private final Map<String, List<User>> sessionUsers = new HashMap<>();
+    // Mapa para rastrear votaciones por sesión
+    private final Map<String, Map<String, Integer>> sessionVotes = new HashMap<>();
+    private final Map<String, Set<String>> sessionUsersVoted = new HashMap<>(); // Registra quién ha votado en cada sesión
+
+
 
 
 
@@ -37,12 +39,15 @@ public class GameSessionService {
     public GameSessionService(GameSessionRepository gameSessionRepository,
                               UserRepository userRepository,
                               QuestionRepository questionRepository,
-                              SimpMessagingTemplate messagingTemplate, YoNuncaNuncaRepository yoNuncaNuncaRepository) { // Inyección del template
+                              SimpMessagingTemplate messagingTemplate,
+                              YoNuncaNuncaRepository yoNuncaNuncaRepository,
+                              QuienEsMasProbableRepository quienEsMasProbableRepository) {
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
-        this.messagingTemplate = messagingTemplate; // Inicialización del template
+        this.messagingTemplate = messagingTemplate;
         this.yoNuncaNuncaRepository = yoNuncaNuncaRepository;
+        this.quienEsMasProbableRepository = quienEsMasProbableRepository;
     }
 
     public void resetGameData(String sessionCode) {
@@ -141,15 +146,6 @@ public class GameSessionService {
 
         gameSessionRepository.save(session); // Guardar los cambios
     }
-
-
-
-    public boolean checkAllUsersReady(String sessionCode) {
-        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
-                .orElseThrow(() -> new IllegalArgumentException("Código de sesión inválido"));
-        return session.getUsers().stream().allMatch(User::isReady);
-    }
-
 
     // Selecciona la siguiente pregunta aleatoria y sincroniza en la sesión
     public Question selectAndSetNextQuestion(String sessionCode, String lastToUser) {
@@ -257,12 +253,10 @@ public class GameSessionService {
         return session.getQuestions().size();
     }
 
+    @Transactional
     public void startYoNuncaNunca(String sessionCode) {
-        // Validar la sesión
         GameSession session = getGameSessionByCode(sessionCode);
-
-        // Cargar preguntas y usuarios
-        List<YoNuncaNunca> questions = yoNuncaNuncaRepository.findAll(); // Cambia según el filtro necesario
+        List<YoNuncaNunca> questions = yoNuncaNuncaRepository.findAll();
         List<User> users = getUsersInSession(sessionCode);
 
         if (questions.isEmpty() || users.isEmpty()) {
@@ -272,39 +266,154 @@ public class GameSessionService {
         Collections.shuffle(questions);
         Collections.shuffle(users);
 
-        sessionQuestions.put(sessionCode, new ArrayList<>(questions));
+        yoNuncaNuncaQuestions.put(sessionCode, new ArrayList<>(questions));
         sessionUsers.put(sessionCode, new ArrayList<>(users));
+    }
+
+    @Transactional
+    public void startQuienEsMasProbable(String sessionCode) {
+        try {
+            GameSession session = getGameSessionByCode(sessionCode);
+            List<QuienEsMasProbable> questions = quienEsMasProbableRepository.findAll();
+            List<User> users = getUsersInSession(sessionCode);
+
+            if (questions.isEmpty()) {
+                throw new IllegalStateException("No hay preguntas disponibles en la base de datos.");
+            }
+            if (users.isEmpty()) {
+                throw new IllegalStateException("No hay usuarios registrados en la sesión.");
+            }
+
+            Collections.shuffle(questions);
+            Collections.shuffle(users);
+
+            quienEsMasProbableQuestions.put(sessionCode, new ArrayList<>(questions));
+            sessionUsers.put(sessionCode, new ArrayList<>(users));
+        } catch (Exception e) {
+            quienEsMasProbableQuestions.remove(sessionCode);
+            sessionUsers.remove(sessionCode);
+            throw e; // Relanzar la excepción para que se registre el error.
+        }
     }
 
 
 
-    public Map<String, Object> getNextYoNuncaNunca(String sessionCode) {
-        // Obtener o inicializar las preguntas de la sesión
-        sessionQuestions.putIfAbsent(sessionCode, yoNuncaNuncaRepository.findAll());
-        sessionUsers.putIfAbsent(sessionCode, getUsersInSession(sessionCode));
 
-        List<YoNuncaNunca> questions = sessionQuestions.get(sessionCode);
+    public YoNuncaNunca getNextYoNuncaNunca(String sessionCode, String tipo) {
+        yoNuncaNuncaQuestions.putIfAbsent(sessionCode, new LinkedList<>(yoNuncaNuncaRepository.findByTipo(tipo)));
+        List<YoNuncaNunca> questions = yoNuncaNuncaQuestions.get(sessionCode);
+
+        // Verificar si hay usuarios en la sesión
         List<User> users = sessionUsers.get(sessionCode);
+        if (users == null || users.isEmpty()) {
+            throw new IllegalStateException("No hay usuarios disponibles en la sesión.");
+        }
 
         if (questions.isEmpty()) {
             throw new IllegalStateException("No hay más preguntas disponibles.");
         }
 
-        if (users.isEmpty()) {
-            // Reiniciar la lista de usuarios si todos ya fueron asignados
-            sessionUsers.put(sessionCode, getUsersInSession(sessionCode));
-            users = sessionUsers.get(sessionCode);
+        return questions.removeFirst();
+    }
+
+    public String getNextQuienEsMasProbable(String sessionCode, String tipo) {
+        clearVotes(sessionCode); // Limpia los votos al traer la siguiente pregunta.
+
+        quienEsMasProbableQuestions.putIfAbsent(sessionCode, new LinkedList<>(quienEsMasProbableRepository.findByTipo(tipo)));
+        List<QuienEsMasProbable> questions = quienEsMasProbableQuestions.get(sessionCode);
+
+        if (questions == null || questions.isEmpty()) {
+            throw new IllegalStateException("No hay más preguntas disponibles.");
         }
 
-        // Seleccionar una pregunta y un usuario aleatoriamente
-        YoNuncaNunca question = questions.removeFirst(); // Tomar la primera pregunta
-        User user = users.removeFirst(); // Tomar el primer usuario
+        QuienEsMasProbable question = questions.removeFirst();
+        String questionText = question.getTexto();
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("question", question);
-        result.put("user", user);
+        List<User> users = getUsersInSession(sessionCode);
+        if (users == null || users.isEmpty()) {
+            throw new IllegalStateException("No hay usuarios disponibles en la sesión.");
+        }
 
-        return result;
+        if (questionText.contains("{player}")) {
+            Random random = new Random();
+            User randomUser = users.get(random.nextInt(users.size()));
+            questionText = questionText.replace("{player}", randomUser.getUsername());
+        }
+
+        return questionText;
     }
+
+
+
+    public boolean checkAllUsersVoted(String sessionCode) {
+        List<User> users = getUsersInSession(sessionCode);
+        Set<String> usersVoted = sessionUsersVoted.get(sessionCode);
+
+        // Validar si hay usuarios y votos registrados
+        if (users == null || usersVoted == null) {
+            return false;
+        }
+
+        // Verificar si todos los usuarios han votado
+        for (User user : users) {
+            if (!usersVoted.contains(user.getUsername())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+
+    public void registerVote(String sessionCode, String votingUser, String votedUser) {
+        sessionVotes.putIfAbsent(sessionCode, new HashMap<>());
+        sessionUsersVoted.putIfAbsent(sessionCode, new HashSet<>());
+
+        Map<String, Integer> votes = sessionVotes.get(sessionCode);
+        Set<String> usersVoted = sessionUsersVoted.get(sessionCode);
+
+        // Verificar si el usuario ya votó
+        if (!usersVoted.contains(votingUser)) {
+            votes.put(votedUser, votes.getOrDefault(votedUser, 0) + 1);
+            usersVoted.add(votingUser); // Registrar que este usuario ya votó
+        } else {
+            throw new IllegalStateException("El usuario ya ha votado.");
+        }
+
+        // Verificar si todos los usuarios han votado
+        if (checkAllUsersVoted(sessionCode)) {
+            messagingTemplate.convertAndSend("/topic/" + sessionCode,
+                    Map.of("event", "voteCompleted", "results", getVoteResults(sessionCode)));
+        }
+    }
+
+
+
+
+
+    public String getVoteResults(String sessionCode) {
+        Map<String, Integer> votes = sessionVotes.get(sessionCode);
+
+        if (votes == null || votes.isEmpty()) {
+            throw new IllegalStateException("No hay votos registrados.");
+        }
+
+        // Encontrar al usuario con más votos
+        return votes.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElseThrow(() -> new IllegalStateException("No hay votos disponibles."))
+                .getKey();
+    }
+
+
+    public void clearVotes(String sessionCode) {
+        sessionVotes.remove(sessionCode);
+        sessionUsersVoted.remove(sessionCode);
+    }
+
+
+
+
+
 
 }

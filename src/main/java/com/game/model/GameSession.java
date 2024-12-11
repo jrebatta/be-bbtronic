@@ -50,9 +50,4 @@ public class GameSession {
         this.users.add(user);
         user.setGameSession(this); // Enlace bidireccional
     }
-
-    public void addQuestion(Question question) {
-        this.questions.add(question);
-        question.setGameSession(this); // Enlace bidireccional
-    }
 }
