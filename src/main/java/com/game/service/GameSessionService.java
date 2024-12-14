@@ -21,10 +21,12 @@ public class GameSessionService {
     private final QuestionRepository questionRepository;
     private final JdbcTemplate jdbcTemplate = null;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CulturaPendejaRepository culturaPendejaRepository;
     private final YoNuncaNuncaRepository yoNuncaNuncaRepository;
     private final QuienEsMasProbableRepository quienEsMasProbableRepository;
 
     private final Map<String, List<YoNuncaNunca>> yoNuncaNuncaQuestions = new HashMap<>();
+    private final Map<String, List<CulturaPendeja>> culturaPendejas = new HashMap<>();
     private final Map<String, List<QuienEsMasProbable>> quienEsMasProbableQuestions = new HashMap<>();
     private final Map<String, List<User>> sessionUsers = new HashMap<>();
     // Mapa para rastrear votaciones por sesión
@@ -39,13 +41,14 @@ public class GameSessionService {
     public GameSessionService(GameSessionRepository gameSessionRepository,
                               UserRepository userRepository,
                               QuestionRepository questionRepository,
-                              SimpMessagingTemplate messagingTemplate,
+                              SimpMessagingTemplate messagingTemplate, CulturaPendejaRepository culturaPendejaRepository,
                               YoNuncaNuncaRepository yoNuncaNuncaRepository,
                               QuienEsMasProbableRepository quienEsMasProbableRepository) {
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
         this.messagingTemplate = messagingTemplate;
+        this.culturaPendejaRepository = culturaPendejaRepository;
         this.yoNuncaNuncaRepository = yoNuncaNuncaRepository;
         this.quienEsMasProbableRepository = quienEsMasProbableRepository;
     }
@@ -296,9 +299,6 @@ public class GameSessionService {
         }
     }
 
-
-
-
     public YoNuncaNunca getNextYoNuncaNunca(String sessionCode, String tipo) {
         yoNuncaNuncaQuestions.putIfAbsent(sessionCode, new LinkedList<>(yoNuncaNuncaRepository.findByTipo(tipo)));
         List<YoNuncaNunca> questions = yoNuncaNuncaQuestions.get(sessionCode);
@@ -315,6 +315,41 @@ public class GameSessionService {
 
         return questions.removeFirst();
     }
+
+    @Transactional
+    public void startCulturaPendeja(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+        List<CulturaPendeja> questions = culturaPendejaRepository.findAll();
+        List<User> users = getUsersInSession(sessionCode);
+
+        if (questions.isEmpty() || users.isEmpty()) {
+            throw new IllegalStateException("No hay suficientes preguntas o usuarios para iniciar Cultura Pendeja.");
+        }
+
+        Collections.shuffle(questions);
+        Collections.shuffle(users);
+
+        culturaPendejas.put(sessionCode, new ArrayList<>(questions));
+        sessionUsers.put(sessionCode, new ArrayList<>(users));
+    }
+
+    public CulturaPendeja getNextCulturaPendeja(String sessionCode, String tipo) {
+        culturaPendejas.putIfAbsent(sessionCode, new LinkedList<>(culturaPendejaRepository.findByTipo(tipo)));
+        List<CulturaPendeja> questions = culturaPendejas.get(sessionCode);
+
+        // Verificar si hay usuarios en la sesión
+        List<User> users = sessionUsers.get(sessionCode);
+        if (users == null || users.isEmpty()) {
+            throw new IllegalStateException("No hay usuarios disponibles en la sesión.");
+        }
+
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("No hay más preguntas disponibles.");
+        }
+
+        return questions.removeFirst();
+    }
+
 
     public String getNextQuienEsMasProbable(String sessionCode, String tipo) {
         clearVotes(sessionCode); // Limpia los votos al traer la siguiente pregunta.

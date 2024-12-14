@@ -1,10 +1,7 @@
 package com.game.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.game.model.GameSession;
-import com.game.model.Question;
-import com.game.model.User;
-import com.game.model.YoNuncaNunca;
+import com.game.model.*;
 import com.game.service.GameSessionService;
 import com.game.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -274,6 +271,41 @@ public class GameSessionController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al obtener la siguiente pregunta: " + e.getMessage());
         }
     }
+
+    @PostMapping("/{sessionCode}/cultura-pendeja/start")
+    public ResponseEntity<?> startCulturaPendeja(@PathVariable String sessionCode) {
+        try {
+            // Iniciar el modo "Cultura Pendeja" en la sesión
+            gameSessionService.startCulturaPendeja(sessionCode);
+
+            // Notificar a todos los usuarios que se inició "Cultura Pendeja"
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"culturaPendejaStarted\"}");
+            return ResponseEntity.ok(Map.of("message", "Cultura Pendeja iniciado correctamente."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al iniciar Cultura Pendeja: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{sessionCode}/next-cultura-pendeja")
+    public ResponseEntity<?> getNextCulturaPendejaQuestion(
+            @PathVariable String sessionCode,
+            @RequestParam String tipo) { // Se agrega el parámetro tipo
+        try {
+            // Obtener la siguiente pregunta filtrada por tipo desde el servicio
+            CulturaPendeja nextQuestionData = gameSessionService.getNextCulturaPendeja(sessionCode, tipo);
+
+            // Responder con la pregunta
+            return ResponseEntity.ok(nextQuestionData);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body("No hay más preguntas disponibles.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al obtener la siguiente pregunta: " + e.getMessage());
+        }
+    }
+
 
     @PostMapping("/{sessionCode}/quien-es-mas-probable/start")
     public ResponseEntity<?> startQuienEsMasProbable(@PathVariable String sessionCode) {
