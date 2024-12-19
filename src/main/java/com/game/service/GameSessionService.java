@@ -232,6 +232,23 @@ public class GameSessionService {
         return currentQuestion;
     }
 
+    public Map<String, Object> generateQuestionResponse(Question question, int currentQuestionNumber, int totalQuestions, String message) {
+        Map<String, Object> response = new HashMap<>();
+
+        // Verificar si la pregunta es anónima
+        if (question.isAnonymous()) {
+            question.setFromUser("Anónimo");
+        }
+
+        response.put("question", question);
+        response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
+        if (message != null && !message.isEmpty()) {
+            response.put("message", message);
+        }
+        return response;
+    }
+
+
 
     public void saveQuestion(String sessionCode, String fromUser, String toUser, String questionText, boolean anonymous) {
         GameSession session = getGameSessionByCode(sessionCode);

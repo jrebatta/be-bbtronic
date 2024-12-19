@@ -161,15 +161,15 @@ public class GameSessionController {
         return ResponseEntity.ok(response);
     }
 
-    private Map<String, Object> generateQuestionResponse(Question question, int currentQuestionNumber, int totalQuestions, String message) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("question", question);
-        response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
-        if (message != null && !message.isEmpty()) {
-            response.put("message", message);
-        }
-        return response;
-    }
+//    private Map<String, Object> generateQuestionResponse(Question question, int currentQuestionNumber, int totalQuestions, String message) {
+//        Map<String, Object> response = new HashMap<>();
+//        response.put("question", question);
+//        response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
+//        if (message != null && !message.isEmpty()) {
+//            response.put("message", message);
+//        }
+//        return response;
+//    }
 
 
     @GetMapping("/{sessionCode}/current-question")
@@ -179,7 +179,8 @@ public class GameSessionController {
             int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
             int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
 
-            Map<String, Object> response = generateQuestionResponse(currentQuestion, currentQuestionNumber, totalQuestions, null);
+            // Llamar al método desde el servicio
+            Map<String, Object> response = gameSessionService.generateQuestionResponse(currentQuestion, currentQuestionNumber, totalQuestions, null);
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -204,7 +205,8 @@ public class GameSessionController {
             int totalQuestions = gameSessionService.getTotalQuestions(sessionCode);
             int currentQuestionNumber = gameSessionService.getCurrentQuestionNumber(sessionCode);
 
-            Map<String, Object> response = generateQuestionResponse(nextQuestion, currentQuestionNumber, totalQuestions, "Pregunta siguiente seleccionada");
+            // Llamar al método desde el servicio
+            Map<String, Object> response = gameSessionService.generateQuestionResponse(nextQuestion, currentQuestionNumber, totalQuestions, "Pregunta siguiente seleccionada");
 
             return ResponseEntity.ok(response);
 
@@ -218,6 +220,8 @@ public class GameSessionController {
             return ResponseEntity.status(404).build();
         }
     }
+
+
 
     @PostMapping("/reset")
     public ResponseEntity<String> resetGameData(@RequestBody Map<String, String> requestBody) {
