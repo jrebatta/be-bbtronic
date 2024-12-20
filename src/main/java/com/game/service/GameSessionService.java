@@ -24,14 +24,18 @@ public class GameSessionService {
     private final CulturaPendejaRepository culturaPendejaRepository;
     private final YoNuncaNuncaRepository yoNuncaNuncaRepository;
     private final QuienEsMasProbableRepository quienEsMasProbableRepository;
+    private final PreguntasIncomodasRepository preguntasIncomodasRepository;
 
     private final Map<String, List<YoNuncaNunca>> yoNuncaNuncaQuestions = new HashMap<>();
     private final Map<String, List<CulturaPendeja>> culturaPendejas = new HashMap<>();
+    private final Map<String, Queue<PreguntasIncomodas>> preguntasIncomodas = new HashMap<>();
     private final Map<String, List<QuienEsMasProbable>> quienEsMasProbableQuestions = new HashMap<>();
     private final Map<String, List<User>> sessionUsers = new HashMap<>();
     // Mapa para rastrear votaciones por sesión
     private final Map<String, Map<String, Integer>> sessionVotes = new HashMap<>();
     private final Map<String, Set<String>> sessionUsersVoted = new HashMap<>(); // Registra quién ha votado en cada sesión
+    private final Map<String, LinkedList<User>> lastSelectedUsers = new HashMap<>();
+
 
 
 
@@ -43,7 +47,7 @@ public class GameSessionService {
                               QuestionRepository questionRepository,
                               SimpMessagingTemplate messagingTemplate, CulturaPendejaRepository culturaPendejaRepository,
                               YoNuncaNuncaRepository yoNuncaNuncaRepository,
-                              QuienEsMasProbableRepository quienEsMasProbableRepository) {
+                              QuienEsMasProbableRepository quienEsMasProbableRepository, PreguntasIncomodasRepository preguntasIncomodasRepository) {
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
@@ -51,6 +55,7 @@ public class GameSessionService {
         this.culturaPendejaRepository = culturaPendejaRepository;
         this.yoNuncaNuncaRepository = yoNuncaNuncaRepository;
         this.quienEsMasProbableRepository = quienEsMasProbableRepository;
+        this.preguntasIncomodasRepository = preguntasIncomodasRepository;
     }
 
     public void resetGameData(String sessionCode) {
@@ -463,6 +468,81 @@ public class GameSessionService {
         sessionUsersVoted.remove(sessionCode);
     }
 
+    @Transactional
+    public void startPreguntasIncomodas(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+        List<PreguntasIncomodas> preguntas = preguntasIncomodasRepository.findAll();
+        List<User> users = getUsersInSession(sessionCode);
+
+        if (preguntas.isEmpty() || users.isEmpty()) {
+            throw new IllegalStateException("No hay suficientes preguntas o usuarios para iniciar Preguntas Incómodas.");
+        }
+
+        // Barajamos las preguntas para aleatoriedad
+        Collections.shuffle(preguntas);
+
+        // Inicializamos la cola de preguntas para la sesión
+        preguntasIncomodas.put(sessionCode, new LinkedList<>(preguntas));
+
+        // Guardamos los usuarios en el mapa correspondiente
+        sessionUsers.put(sessionCode, users);
+
+        // Notificamos que el juego comenzó
+        messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"preguntasIncomodasStarted\"}");
+    }
+
+
+    public Map<String, Object> getNextPreguntasIncomodas(String sessionCode, String tipo) {
+        Queue<PreguntasIncomodas> questions = preguntasIncomodas.get(sessionCode);
+        List<User> users = sessionUsers.get(sessionCode);
+
+        if (questions == null || questions.isEmpty()) {
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"allQuestionsShown\"}");
+            throw new IllegalStateException("No hay más preguntas disponibles.");
+        }
+
+        if (users == null || users.isEmpty()) {
+            throw new IllegalStateException("No hay usuarios en la sesión.");
+        }
+
+        // Filtrar preguntas por tipo
+        PreguntasIncomodas question = questions.stream()
+                .filter(q -> q.getTipo().equalsIgnoreCase(tipo))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No hay preguntas del tipo especificado."));
+
+        // Removemos la pregunta seleccionada de la cola
+        questions.remove(question);
+
+        // Manejamos el historial de usuarios seleccionados
+        lastSelectedUsers.putIfAbsent(sessionCode, new LinkedList<>());
+
+        LinkedList<User> recentUsers = lastSelectedUsers.get(sessionCode);
+        User randomUser;
+
+        do {
+            randomUser = users.get(new Random().nextInt(users.size()));
+        } while (recentUsers.contains(randomUser) && users.size() > 2);
+
+        // Actualizamos el historial de usuarios
+        recentUsers.addLast(randomUser);
+        if (recentUsers.size() > 2) {
+            recentUsers.removeFirst();
+        }
+
+        // Reemplazamos {player} en el texto de la pregunta
+        String updatedText = question.getTexto().replace("{player}", randomUser.getUsername());
+        question.setTexto(updatedText);
+
+        // Notificamos la siguiente pregunta
+        messagingTemplate.convertAndSend("/topic/" + sessionCode, Map.of("event", "nextQuestion", "question", updatedText, "toUser", randomUser.getUsername()));
+
+        // Devolvemos la pregunta y el usuario en un mapa
+        return Map.of(
+                "question", updatedText,
+                "toUser", randomUser.getUsername()
+        );
+    }
 
 
 

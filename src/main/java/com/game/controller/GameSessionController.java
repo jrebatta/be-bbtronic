@@ -417,5 +417,36 @@ public class GameSessionController {
         }
     }
 
+    @PostMapping("/{sessionCode}/start-preguntas-incomodas")
+    public ResponseEntity<?> startPreguntasIncomodas(@PathVariable String sessionCode) {
+        try {
+            gameSessionService.startPreguntasIncomodas(sessionCode);
+            return ResponseEntity.ok(Map.of("message", "Preguntas Incómodas iniciado correctamente."));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al iniciar Preguntas Incómodas: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{sessionCode}/next-preguntas-incomodas")
+    public ResponseEntity<?> getNextPreguntasIncomodas(
+            @PathVariable String sessionCode,
+            @RequestParam String tipo) {
+        try {
+            Map<String, Object> response = gameSessionService.getNextPreguntasIncomodas(sessionCode, tipo);
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al obtener la siguiente pregunta: " + e.getMessage()));
+        }
+    }
+
+
+
+
 
 }
