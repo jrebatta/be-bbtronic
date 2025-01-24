@@ -1,18 +1,30 @@
-name: Docker Image CI
+name: Run Docker Compose
 
 on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+  workflow_dispatch: # Permite ejecutar este workflow manualmente desde la interfaz de GitHub
 
 jobs:
-
-  build:
-
+  run-docker-compose:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      # Verifica el código del repositorio
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Configura Docker en el runner
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+
+      # Construye y ejecuta el servicio con Docker Compose
+      - name: Build and Run with Docker Compose
+        run: |
+          docker-compose up --build -d
+
+      # Verifica que el contenedor esté corriendo
+      - name: Check running containers
+        run: docker ps
+
+      # (Opcional) Muestra los logs del contenedor
+      - name: Show logs
+        run: docker-compose logs
