@@ -1,10 +1,11 @@
 package com.game.controller;
+
 import com.game.model.User;
+import com.game.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.game.service.UserService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,12 +24,23 @@ public class UserController {
         this.userService = userService;
     }
 
+    /**
+     * Obtiene todos los usuarios.
+     *
+     * @return una lista de todos los usuarios
+     */
     @GetMapping("/all")
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> allUsers = userService.getAllUsers();
         return ResponseEntity.ok(allUsers);
     }
 
+    /**
+     * Registra un nuevo usuario.
+     *
+     * @param username el nombre de usuario del nuevo usuario
+     * @return una respuesta con el nombre de usuario y el token de sesión
+     */
     @GetMapping("/register")
     public ResponseEntity<Map<String, String>> registerUser(@RequestParam("username") String username) {
         try {
@@ -44,6 +56,11 @@ public class UserController {
         }
     }
 
+    /**
+     * Obtiene los usuarios en línea.
+     *
+     * @return una lista de usuarios en línea
+     */
     @GetMapping("/online")
     public ResponseEntity<List<Map<String, String>>> getOnlineUsers() {
         List<User> onlineUsers = userService.getAllUsers();
@@ -58,6 +75,12 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Cierra la sesión de un usuario.
+     *
+     * @param sessionToken el token de sesión del usuario
+     * @return una respuesta indicando el resultado de la operación
+     */
     @DeleteMapping("/logout")
     public ResponseEntity<String> logoutUser(@RequestParam("sessionToken") String sessionToken) {
         boolean isLoggedOut = userService.logoutUser(sessionToken);
@@ -69,7 +92,12 @@ public class UserController {
         }
     }
 
-    // Endpoint para actualizar el estado de 'ready' del usuario
+    /**
+     * Marca a un usuario como listo.
+     *
+     * @param username el nombre de usuario del usuario
+     * @return una respuesta indicando el resultado de la operación
+     */
     @PostMapping("/{username}/ready")
     public ResponseEntity<Void> setUserReady(@PathVariable String username) {
         userService.setUserReady(username);

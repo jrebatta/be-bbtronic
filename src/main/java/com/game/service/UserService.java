@@ -23,57 +23,80 @@ public class UserService {
         this.gameSessionRepository = gameSessionRepository;
     }
 
-    // Método para registrar usuario, validando si ya existe
+    /**
+     * Registra un nuevo usuario si el nombre de usuario no está ya en uso.
+     *
+     * @param username el nombre de usuario del nuevo usuario
+     * @return el usuario registrado
+     * @throws IllegalArgumentException si el nombre de usuario ya está en uso
+     */
     public User registerUser(String username) {
-        if (userRepository.findByUsername(username).isPresent()) {
+        userRepository.findByUsername(username).ifPresent(u -> {
             throw new IllegalArgumentException("El nombre de usuario ya está en uso.");
-        }
+        });
         User user = new User(username);
         return userRepository.save(user);
     }
 
-    // Método para obtener todos los usuarios (en línea)
+    /**
+     * Recupera todos los usuarios.
+     *
+     * @return una lista de todos los usuarios
+     */
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
-    // Método para cerrar la sesión del usuario y eliminarlo de la base de datos
+    /**
+     * Cierra la sesión de un usuario y lo elimina de la base de datos.
+     *
+     * @param sessionToken el token de sesión del usuario
+     * @return true si el usuario fue cerrado correctamente, false en caso contrario
+     */
     public boolean logoutUser(String sessionToken) {
-        // Buscar al usuario por su sessionToken
         Optional<User> user = userRepository.findBySessionToken(sessionToken);
 
         if (user.isPresent()) {
             User foundUser = user.get();
-
-            // Eliminar el usuario de cualquier sesión de juego si está presente
-            Optional<GameSession> gameSession = gameSessionRepository.findByUsersContaining(foundUser);
-            gameSession.ifPresent(session -> {
-                session.getUsers().remove(foundUser); // Eliminar el usuario de la sesión
-                gameSessionRepository.save(session); // Guardar los cambios en la sesión
-            });
-
-            // Eliminar el usuario de la tabla de usuarios
+            removeUserFromSession(foundUser);
             userRepository.delete(foundUser);
-
-            return true; // Operación exitosa
+            return true;
         }
 
-        return false; // Usuario no encontrado
+        return false;
     }
 
+    /**
+     * Elimina a un usuario de cualquier sesión de juego en la que esté.
+     *
+     * @param user el usuario a ser eliminado
+     */
+    private void removeUserFromSession(User user) {
+        gameSessionRepository.findByUsersContaining(user).ifPresent(session -> {
+            session.getUsers().remove(user);
+            gameSessionRepository.save(session);
+        });
+    }
 
-    // Método que borra todos los usuarios al iniciar la aplicación
+    /**
+     * Borra todos los usuarios al iniciar la aplicación.
+     */
     @PostConstruct
     public void clearUsersOnStartup() {
         userRepository.deleteAll();
         System.out.println("Todos los usuarios han sido borrados al iniciar la aplicación.");
     }
 
+    /**
+     * Marca a un usuario como listo.
+     *
+     * @param username el nombre de usuario del usuario
+     * @throws IllegalArgumentException si el usuario no es encontrado
+     */
     public void setUserReady(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         user.setReady(true);
         userRepository.save(user);
     }
-
 }

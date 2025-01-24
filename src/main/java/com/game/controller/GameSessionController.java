@@ -9,12 +9,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde este origen
+@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde estos orígenes
 @RequestMapping("/api/game-sessions")
 public class GameSessionController {
 
@@ -61,7 +62,6 @@ public class GameSessionController {
         }
     }
 
-
     @GetMapping("/{sessionCode}")
     public ResponseEntity<?> getGameSession(@PathVariable("sessionCode") String sessionCode) {
         try {
@@ -79,8 +79,6 @@ public class GameSessionController {
         }
     }
 
-
-    // Endpoint para unirse a una sesión existente
     @PostMapping("/join")
     public ResponseEntity<?> joinGameSession(@RequestBody Map<String, String> requestData) {
         String sessionCode = requestData.get("sessionCode");
@@ -129,7 +127,6 @@ public class GameSessionController {
         return ResponseEntity.ok().build();
     }
 
-    // Endpoint para iniciar el juego
     @PostMapping("/{sessionCode}/start-game")
     public ResponseEntity<Map<String, String>> startGame(@PathVariable String sessionCode) {
         gameSessionService.startGame(sessionCode);
@@ -161,17 +158,6 @@ public class GameSessionController {
         return ResponseEntity.ok(response);
     }
 
-//    private Map<String, Object> generateQuestionResponse(Question question, int currentQuestionNumber, int totalQuestions, String message) {
-//        Map<String, Object> response = new HashMap<>();
-//        response.put("question", question);
-//        response.put("numeroDePregunta", currentQuestionNumber + "/" + totalQuestions);
-//        if (message != null && !message.isEmpty()) {
-//            response.put("message", message);
-//        }
-//        return response;
-//    }
-
-
     @GetMapping("/{sessionCode}/current-question")
     public ResponseEntity<Map<String, Object>> getCurrentQuestion(@PathVariable("sessionCode") String sessionCode) {
         try {
@@ -187,7 +173,6 @@ public class GameSessionController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
     }
-
 
     @PostMapping("/{sessionCode}/next-random-question")
     public ResponseEntity<Map<String, Object>> nextRandomQuestion(
@@ -220,8 +205,6 @@ public class GameSessionController {
             return ResponseEntity.status(404).build();
         }
     }
-
-
 
     @PostMapping("/reset")
     public ResponseEntity<String> resetGameData(@RequestBody Map<String, String> requestBody) {
@@ -257,7 +240,6 @@ public class GameSessionController {
                     .body(Map.of("error", "Error al iniciar Yo Nunca Nunca: " + e.getMessage()));
         }
     }
-
 
     @GetMapping("/{sessionCode}/next-yo-nunca-nunca")
     public ResponseEntity<?> getNextYoNuncaNuncaQuestion(
@@ -310,7 +292,6 @@ public class GameSessionController {
         }
     }
 
-
     @PostMapping("/{sessionCode}/quien-es-mas-probable/start")
     public ResponseEntity<?> startQuienEsMasProbable(@PathVariable String sessionCode) {
         try {
@@ -333,8 +314,6 @@ public class GameSessionController {
                     .body(Map.of("error", "No se pudo iniciar el juego: " + e.getMessage()));
         }
     }
-
-
 
     @GetMapping("/{sessionCode}/next-quien-es-mas-probable")
     public ResponseEntity<?> getNextQuienEsMasProbable(
@@ -378,8 +357,6 @@ public class GameSessionController {
         }
     }
 
-
-    // Obtener resultados de la votación
     @GetMapping("/{sessionCode}/vote-results")
     public ResponseEntity<?> getVoteResults(@PathVariable String sessionCode) {
         try {
@@ -393,7 +370,6 @@ public class GameSessionController {
         }
     }
 
-    // Verificar si todos los usuarios han votado
     @GetMapping("/{sessionCode}/check-all-voted")
     public ResponseEntity<?> checkAllUsersVoted(@PathVariable String sessionCode) {
         try {
@@ -405,7 +381,6 @@ public class GameSessionController {
         }
     }
 
-    // Limpiar votos después de la pregunta
     @PostMapping("/{sessionCode}/clear-votes")
     public ResponseEntity<?> clearVotes(@PathVariable String sessionCode) {
         try {
