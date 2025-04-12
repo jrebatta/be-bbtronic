@@ -38,6 +38,32 @@ public class UserService {
         return userRepository.save(user);
     }
 
+
+    /**
+     * Permite a un usuario unirse a una sesión ya creada.
+     *
+     * @param sessionCode el código de la sesión
+     * @param username el nombre de usuario del usuario
+     * @throws IllegalArgumentException si la sesión no es encontrada o el usuario ya está en la sesión
+     */
+    public void joinSession(String sessionCode, String username) {
+        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Código de sesión inválido"));
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        if (session.getUsers().stream().anyMatch(u -> u.getUsername().equals(username))) {
+            throw new IllegalArgumentException("El usuario ya está en la sesión");
+        }
+
+        user.setGameSession(session);
+        session.addUser(user);
+
+        gameSessionRepository.save(session);
+        userRepository.save(user);
+    }
+
     /**
      * Recupera todos los usuarios.
      *

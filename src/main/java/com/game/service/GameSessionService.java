@@ -25,6 +25,7 @@ public class GameSessionService {
     private final YoNuncaNuncaRepository yoNuncaNuncaRepository;
     private final QuienEsMasProbableRepository quienEsMasProbableRepository;
     private final PreguntasIncomodasRepository preguntasIncomodasRepository;
+    private final UserService userService;
 
     private final Map<String, List<YoNuncaNunca>> yoNuncaNuncaQuestions = new HashMap<>();
     private final Map<String, List<CulturaPendeja>> culturaPendejas = new HashMap<>();
@@ -33,9 +34,7 @@ public class GameSessionService {
     private final Map<String, List<User>> sessionUsers = new HashMap<>();
     private final Map<String, Map<String, Integer>> sessionVotes = new HashMap<>();
     private final Map<String, Set<String>> sessionUsersVoted = new HashMap<>();
-    private final Map<String, LinkedList<User>> lastSelectedUsers = new HashMap<>();
     private final Map<String, List<User>> remainingUsers = new HashMap<>();
-
 
     @Autowired
     public GameSessionService(GameSessionRepository gameSessionRepository,
@@ -46,7 +45,8 @@ public class GameSessionService {
                               CulturaPendejaRepository culturaPendejaRepository,
                               YoNuncaNuncaRepository yoNuncaNuncaRepository,
                               QuienEsMasProbableRepository quienEsMasProbableRepository,
-                              PreguntasIncomodasRepository preguntasIncomodasRepository) {
+                              PreguntasIncomodasRepository preguntasIncomodasRepository,
+                              UserService userService) {
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
@@ -56,6 +56,7 @@ public class GameSessionService {
         this.yoNuncaNuncaRepository = yoNuncaNuncaRepository;
         this.quienEsMasProbableRepository = quienEsMasProbableRepository;
         this.preguntasIncomodasRepository = preguntasIncomodasRepository;
+        this.userService = userService;
     }
 
     public void resetGameData(String sessionCode) {
@@ -88,18 +89,7 @@ public class GameSessionService {
     }
 
     public void addUserToSession(String sessionCode, User user) {
-        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid session code"));
-
-        if (session.getUsers().stream().anyMatch(u -> u.getUsername().equals(user.getUsername()))) {
-            throw new IllegalArgumentException("User already in session");
-        }
-
-        user.setGameSession(session);
-        userRepository.save(user);
-
-        session.addUser(user);
-        gameSessionRepository.save(session);
+        userService.joinSession(sessionCode, user.getUsername());
     }
 
     public List<User> getUsersInSession(String sessionCode) {

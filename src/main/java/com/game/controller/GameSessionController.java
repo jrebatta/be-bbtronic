@@ -92,6 +92,12 @@ public class GameSessionController {
         }
 
         try {
+            // Verificar si la sesión existe
+            GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
+            if (session == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Código de sesión inválido."));
+            }
+
             // Registrar usuario y agregarlo a la sesión
             User user = userService.registerUser(username);
             gameSessionService.addUserToSession(sessionCode, user);
