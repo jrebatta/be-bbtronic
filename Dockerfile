@@ -1,29 +1,33 @@
-# Usa una imagen base con Maven para compilar y ejecutar la aplicación
+# Etapa 1: Compilación del proyecto
 FROM eclipse-temurin:21-jdk as builder
 
-# Establece el directorio de trabajo para la compilación
 WORKDIR /app
 
-# Copia todos los archivos necesarios para el build
-COPY . .
+# Copia solo los archivos necesarios para instalar dependencias y compilar
+COPY .mvn/ .mvn
+COPY mvnw pom.xml ./
 
-# Ajusta permisos para mvnw
+# Da permisos al wrapper
 RUN chmod +x mvnw
 
-# Ejecuta el comando Maven para construir el JAR
+# Descarga dependencias antes de copiar el código completo (mejora el cache)
+RUN ./mvnw dependency:go-offline
+
+# Luego copia el código fuente completo
+COPY src ./src
+COPY src/main/resources/application.properties ./src/main/resources/application.properties
+
+# Ejecuta el build sin pruebas
 RUN ./mvnw clean package -DskipTests
 
-# Usa una imagen más ligera para ejecutar la aplicación
+# Etapa 2: Imagen liviana para ejecutar
 FROM eclipse-temurin:21-jdk
 
-# Establece el directorio de trabajo para la ejecución
 WORKDIR /app
 
-# Copia el JAR generado desde la etapa anterior
+# Copia solo el .jar generado
 COPY --from=builder /app/target/gameapp-0.0.1-SNAPSHOT.jar app.jar
 
-# Expone el puerto en el que la aplicación escuchará
 EXPOSE 8080
 
-# Comando para ejecutar la aplicación
 ENTRYPOINT ["java", "-jar", "app.jar"]
