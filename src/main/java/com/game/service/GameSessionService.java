@@ -101,9 +101,21 @@ public class GameSessionService {
 
     @PostConstruct
     public void clearUsersOnStartup() {
+        // Preservar las preguntas existentes antes de borrar las sesiones
+        List<Question> existingQuestions = questionRepository.findAll();
+
+        // Desvincular las preguntas de las sesiones para evitar que se borren en cascada
+        for (Question question : existingQuestions) {
+            question.setGameSession(null);
+        }
+        questionRepository.saveAll(existingQuestions);
+
+        // Ahora es seguro borrar usuarios y sesiones
         userRepository.deleteAll();
         gameSessionRepository.deleteAll();
+
         System.out.println("All users and sessions have been cleared on startup.");
+        System.out.println("Preserved " + existingQuestions.size() + " questions from deletion.");
     }
 
     public GameSession getGameSessionByCode(String sessionCode) {
