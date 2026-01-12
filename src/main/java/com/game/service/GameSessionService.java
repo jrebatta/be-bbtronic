@@ -73,6 +73,7 @@ public class GameSessionService {
         GameSession gameSession = new GameSession();
         gameSession.setCreatorName(user.getUsername());
         gameSession.setSessionCode(generateSessionCode());
+        gameSession.setCurrentGame(null); // Inicialmente sin juego activo
 
         GameSession savedSession = gameSessionRepository.saveAndFlush(gameSession);
 
@@ -127,6 +128,7 @@ public class GameSessionService {
         GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid session code"));
         session.setGameStarted(true);
+        session.setCurrentGame("preguntas-directas"); // Establecer el juego actual
 
         if (!session.getQuestions().isEmpty()) {
             Question firstQuestion = session.getQuestions().getFirst();
@@ -260,6 +262,10 @@ public class GameSessionService {
 
         yoNuncaNuncaQuestions.put(sessionCode, new ArrayList<>(questions));
         sessionUsers.put(sessionCode, new ArrayList<>(users));
+
+        // Establecer el juego actual
+        session.setCurrentGame("yo-nunca-nunca");
+        gameSessionRepository.save(session);
     }
 
     @Transactional
@@ -281,6 +287,10 @@ public class GameSessionService {
 
             quienEsMasProbableQuestions.put(sessionCode, new ArrayList<>(questions));
             sessionUsers.put(sessionCode, new ArrayList<>(users));
+
+            // Establecer el juego actual
+            session.setCurrentGame("quien-es-mas-probable");
+            gameSessionRepository.save(session);
         } catch (Exception e) {
             quienEsMasProbableQuestions.remove(sessionCode);
             sessionUsers.remove(sessionCode);
@@ -319,6 +329,10 @@ public class GameSessionService {
 
         culturaPendejas.put(sessionCode, new ArrayList<>(questions));
         sessionUsers.put(sessionCode, new ArrayList<>(users));
+
+        // Establecer el juego actual
+        session.setCurrentGame("cultura-pendeja");
+        gameSessionRepository.save(session);
     }
 
     public CulturaPendeja getNextCulturaPendeja(String sessionCode, String tipo) {
@@ -443,6 +457,10 @@ public class GameSessionService {
 
         preguntasIncomodas.put(sessionCode, new LinkedList<>(preguntas));
         sessionUsers.put(sessionCode, users);
+
+        // Establecer el juego actual
+        session.setCurrentGame("preguntas-incomodas");
+        gameSessionRepository.save(session);
 
         messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"preguntasIncomodasStarted\"}");
     }

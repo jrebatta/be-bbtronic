@@ -72,6 +72,7 @@ public class GameSessionController {
             response.put("creator", session.getCreatorName());
             response.put("gameStarted", session.isGameStarted());
             response.put("users", users); // Agregar lista de usuarios a la respuesta
+            response.put("currentGame", session.getCurrentGame()); // Agregar el juego actual
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {

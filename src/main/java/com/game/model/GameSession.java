@@ -32,6 +32,8 @@ public class GameSession {
     @Column(nullable = false, columnDefinition = "integer default 0")
     private int currentQuestionIndex = 0;
 
+    private String currentGame; // Juego activo actual: null, "preguntas-directas", "yo-nunca-nunca", etc.
+
     @OneToMany(mappedBy = "gameSession", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Question> questions = new ArrayList<>();
 
