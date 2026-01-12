@@ -14,7 +14,7 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(@NonNull CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins("https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500")
+                        .allowedOrigins("https://fe-bbtronic-vue.vercel.app", "http://127.0.0.1:5500")
                         .allowedMethods("*")
                         .allowedHeaders("*")
                         .allowCredentials(true);

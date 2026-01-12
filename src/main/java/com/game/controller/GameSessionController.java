@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = {"https://fe-bbtronic.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde estos orígenes
+@CrossOrigin(origins = {"https://fe-bbtronic-vue.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde estos orígenes
 @RequestMapping("/api/game-sessions")
 public class GameSessionController {
 
