@@ -1,5 +1,8 @@
 package com.game.service;
 
+import com.game.dto.GameStateDTO;
+import com.game.dto.SessionSyncDTO;
+import com.game.dto.SyncUserDTO;
 import com.game.model.*;
 import com.game.repository.*;
 import jakarta.annotation.PostConstruct;
@@ -674,4 +677,194 @@ public class GameSessionService {
                 "toUser", randomUser.getUsername()
         );
     }
+
+    /**
+     * Obtiene el estado completo de sincronización de una sesión
+     * @param sessionCode Código de la sesión
+     * @param username Usuario que solicita la sincronización (opcional, usado para hasVoted)
+     * @return DTO con toda la información de sincronización
+     */
+    @Transactional(readOnly = true)
+    public SessionSyncDTO getSessionSync(String sessionCode, String username) {
+        // Obtener la sesión
+        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionCode));
+
+        // Convertir usuarios a DTOs
+        List<SyncUserDTO> userDTOs = session.getUsers().stream()
+                .map(user -> new SyncUserDTO(
+                        user.getUsername(),
+                        user.isReady(),
+                        true, // connected - siempre true por ahora, se puede mejorar con seguimiento de WebSocket
+                        user.getSessionToken()
+                ))
+                .collect(Collectors.toList());
+
+        // Construir GameState si hay un juego activo
+        GameStateDTO gameState = null;
+        if (session.getCurrentGame() != null && !session.getCurrentGame().isEmpty()) {
+            Map<String, Object> currentQuestionData = buildCurrentQuestionData(session, sessionCode, username);
+
+            gameState = new GameStateDTO(
+                    session.getRoundStatus() != null ? session.getRoundStatus() : "IN_PROGRESS",
+                    session.getCurrentRoundId(),
+                    determineGamePhase(session),
+                    currentQuestionData
+            );
+        }
+
+        // Construir la respuesta de sincronización
+        return new SessionSyncDTO(
+                session.getSessionCode(),
+                session.getCreatorName(),
+                userDTOs,
+                session.getCurrentGame(),
+                gameState,
+                System.currentTimeMillis()
+        );
+    }
+
+    /**
+     * Construye los datos de la pregunta actual según el tipo de juego
+     */
+    private Map<String, Object> buildCurrentQuestionData(GameSession session, String sessionCode, String username) {
+        if (session.getCurrentGame() == null) {
+            return null;
+        }
+
+        try {
+            switch (session.getCurrentGame()) {
+                case "preguntas-directas":
+                    return buildPreguntasDirectasData(session);
+                case "yo-nunca-nunca":
+                    return buildYoNuncaNuncaData(sessionCode);
+                case "preguntas-incomodas":
+                    return buildPreguntasIncomodasData(sessionCode);
+                case "quien-es-mas-probable":
+                    return buildQuienEsMasProbableData(sessionCode, username);
+                case "cultura-pendeja":
+                    return buildCulturaPendejaData(sessionCode);
+                default:
+                    return null;
+            }
+        } catch (Exception e) {
+            // Si hay error obteniendo datos, retornar null (no romper la sincronización)
+            System.err.println("Error building currentQuestionData: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Construye datos para Preguntas Directas
+     */
+    private Map<String, Object> buildPreguntasDirectasData(GameSession session) {
+        try {
+            // Si no hay preguntas o no estamos en fase de juego, retornar null
+            if (!"IN_PROGRESS".equals(session.getRoundStatus()) || session.getShownQuestions().isEmpty()) {
+                return null;
+            }
+
+            // Obtener la pregunta actual
+            List<Question> orderedQuestions = session.getQuestions().stream()
+                    .filter(q -> session.getCurrentRoundId() != null &&
+                               session.getCurrentRoundId().equals(q.getRoundId()))
+                    .sorted(Comparator.comparingLong(Question::getId))
+                    .collect(Collectors.toList());
+
+            if (orderedQuestions.isEmpty() || session.getCurrentQuestionIndex() < 0 ||
+                session.getCurrentQuestionIndex() >= orderedQuestions.size()) {
+                return null;
+            }
+
+            Question currentQuestion = orderedQuestions.get(session.getCurrentQuestionIndex());
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("question", currentQuestion.getQuestion());
+            data.put("fromUser", currentQuestion.isAnonymous() ? "Anonymous" : currentQuestion.getFromUser());
+            data.put("toUser", currentQuestion.getToUser());
+            data.put("numeroDePregunta", session.getCurrentQuestionIndex() + 1);
+            data.put("anonymous", currentQuestion.isAnonymous());
+
+            return data;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Construye datos para Yo Nunca Nunca
+     */
+    private Map<String, Object> buildYoNuncaNuncaData(String sessionCode) {
+        // Para Yo Nunca Nunca, necesitamos acceder a la última pregunta mostrada
+        // Como es un juego basado en listas que se van consumiendo, no hay un "índice actual"
+        // Retornamos null para que el frontend maneje el estado
+        return null;
+    }
+
+    /**
+     * Construye datos para Preguntas Incómodas
+     */
+    private Map<String, Object> buildPreguntasIncomodasData(String sessionCode) {
+        // Similar a Yo Nunca Nunca, no hay un índice actual persistido
+        return null;
+    }
+
+    /**
+     * Construye datos para Quién Es Más Probable
+     */
+    private Map<String, Object> buildQuienEsMasProbableData(String sessionCode, String username) {
+        // Verificar si hay votación activa
+        Map<String, Integer> votes = sessionVotes.get(sessionCode);
+        Set<String> usersVoted = sessionUsersVoted.get(sessionCode);
+
+        if (votes == null || usersVoted == null) {
+            return null;
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("votingActive", true);
+        data.put("hasVoted", username != null && usersVoted.contains(username));
+
+        // Obtener el voto del usuario actual si existe
+        String currentUserVote = null;
+        if (username != null && usersVoted.contains(username)) {
+            // Como no guardamos quien votó a quien individualmente, solo podemos saber si votó
+            // Para una implementación completa necesitarías un Map<String, String> de votante -> votado
+            currentUserVote = null; // Por ahora null
+        }
+        data.put("currentUserVote", currentUserVote);
+
+        // No podemos obtener la pregunta actual porque se consume de la lista
+        // El frontend debe manejar esto
+        return data;
+    }
+
+    /**
+     * Construye datos para Cultura Pendeja
+     */
+    private Map<String, Object> buildCulturaPendejaData(String sessionCode) {
+        // Similar a los otros juegos basados en listas
+        return null;
+    }
+
+    /**
+     * Determina la fase actual del juego basándose en el estado de la sesión
+     */
+    private String determineGamePhase(GameSession session) {
+        if (session.getRoundStatus() != null) {
+            switch (session.getRoundStatus()) {
+                case "WAITING_QUESTIONS":
+                    return "WAITING_QUESTIONS";
+                case "IN_PROGRESS":
+                    return "SHOWING_QUESTIONS";
+                case "COMPLETED":
+                    return "COMPLETED";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+        return "SHOWING_QUESTIONS"; // Por defecto
+    }
 }
+
+

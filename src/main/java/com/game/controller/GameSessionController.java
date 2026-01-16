@@ -1,6 +1,7 @@
 package com.game.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.game.dto.SessionSyncDTO;
 import com.game.model.*;
 import com.game.service.GameSessionService;
 import com.game.service.UserService;
@@ -534,5 +535,38 @@ public class GameSessionController {
         }
     }
 
+    /**
+     * Endpoint de sincronización completa de la sesión
+     * Devuelve toda la información necesaria para sincronizar el estado del cliente
+     *
+     * GET /api/game-sessions/{sessionCode}/sync
+     *
+     * Respuesta incluye:
+     * - Código de sesión y creador
+     * - Lista completa de usuarios con estado ready y connected
+     * - Juego actual activo (si existe)
+     * - Estado del juego (status, roundId, phase)
+     * - Timestamp del servidor
+     *
+     * @param sessionCode Código de la sesión
+     * @return DTO con toda la información de sincronización
+     */
+    @GetMapping("/{sessionCode}/sync")
+    public ResponseEntity<?> getSessionSync(
+            @PathVariable String sessionCode,
+            @RequestParam(required = false) String username) {
+        try {
+            SessionSyncDTO syncData = gameSessionService.getSessionSync(sessionCode, username);
+            return ResponseEntity.ok(syncData);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Sesión no encontrada: " + e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al obtener sincronización: " + e.getMessage()));
+        }
+    }
+
 }
+
 
