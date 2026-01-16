@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = {"https://fe-bbtronic-vue.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde estos orígenes
+@CrossOrigin(origins = {"https://fe-bbtronic-vue.vercel.app", "http://localhost:5173"}) // Permite solicitudes solo desde estos orígenes
 @RequestMapping("/api/game-sessions")
 public class GameSessionController {
 
@@ -134,6 +134,10 @@ public class GameSessionController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Endpoint genérico para iniciar cualquier juego
+     * Mantener para compatibilidad con otros juegos (Yo Nunca Nunca, etc.)
+     */
     @PostMapping("/{sessionCode}/start-game")
     public ResponseEntity<Map<String, String>> startGame(@PathVariable String sessionCode) {
         gameSessionService.startGame(sessionCode);
@@ -148,19 +152,58 @@ public class GameSessionController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Endpoint ESPECÍFICO para iniciar el juego "Preguntas Directas" con sistema de rondas
+     * USAR ESTE para Preguntas Directas en lugar de /start-game
+     */
+    @PostMapping("/{sessionCode}/start-preguntas-directas")
+    public ResponseEntity<Map<String, Object>> startPreguntasDirectas(@PathVariable String sessionCode) {
+        gameSessionService.startPreguntasDirectas(sessionCode);
+
+        // Notificar a todos los usuarios
+        messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"preguntasDirectasStarted\"}");
+
+        // Obtener info de la ronda creada
+        Map<String, Object> roundInfo = gameSessionService.getRoundInfo(sessionCode);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("mensaje", "Preguntas Directas iniciado");
+        response.put("roundId", roundInfo.get("roundId"));
+        response.put("roundStatus", roundInfo.get("roundStatus"));
+
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{sessionCode}/check-all-ready")
     public ResponseEntity<Map<String, Object>> checkAllReady(@PathVariable("sessionCode") String sessionCode) {
         GameSession session = gameSessionService.getGameSessionByCode(sessionCode);
         boolean allReady = session.getUsers().stream().allMatch(User::isReady);
 
-        if (allReady) {
-            System.out.println("Todos los usuarios están listos. Enviando evento allReady...");
-            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"allReady\"}");
-        }
-
         Map<String, Object> response = new HashMap<>();
         response.put("allReady", allReady);
-        response.put("message", allReady ? "Todos los usuarios están listos" : "Aún faltan usuarios por estar listos");
+        response.put("roundId", session.getCurrentRoundId());
+        response.put("roundStatus", session.getRoundStatus());
+
+        if (allReady && session.getUsers().size() > 0) {
+            System.out.println("Todos los usuarios están listos. Enviando evento allReady...");
+
+            // Si están en WAITING_QUESTIONS, cambiar a IN_PROGRESS automáticamente
+            if ("WAITING_QUESTIONS".equals(session.getRoundStatus())) {
+                try {
+                    gameSessionService.startRoundPlay(sessionCode);
+                    response.put("roundStatus", "IN_PROGRESS");
+                    response.put("message", "Todos listos. ¡La ronda ha comenzado!");
+                } catch (IllegalStateException e) {
+                    response.put("message", e.getMessage());
+                    return ResponseEntity.ok(response);
+                }
+            }
+
+            messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"allReady\"}");
+            response.put("message", "Todos los usuarios están listos");
+        } else {
+            response.put("message", "Aún faltan usuarios por estar listos");
+        }
 
         return ResponseEntity.ok(response);
     }
@@ -427,8 +470,69 @@ public class GameSessionController {
         }
     }
 
+    /**
+     * Inicia una nueva ronda de preguntas directas
+     * Genera un nuevo roundId, resetea usuarios ready y limpia preguntas mostradas
+     */
+    @PostMapping("/{sessionCode}/start-new-round")
+    public ResponseEntity<Map<String, Object>> startNewRound(@PathVariable String sessionCode) {
+        try {
+            Map<String, Object> response = gameSessionService.startNewRound(sessionCode);
 
+            // Notificar a todos los usuarios que se inició una nueva ronda
+            messagingTemplate.convertAndSend("/topic/" + sessionCode,
+                "{\"event\":\"newRoundStarted\",\"roundId\":\"" + response.get("roundId") + "\"}");
 
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al iniciar nueva ronda: " + e.getMessage()));
+        }
+    }
 
+    /**
+     * Obtiene información completa de la ronda actual
+     * Incluye: roundId, status, juego actual, cantidad de preguntas, usuarios ready
+     */
+    @GetMapping("/{sessionCode}/round-info")
+    public ResponseEntity<Map<String, Object>> getRoundInfo(@PathVariable String sessionCode) {
+        try {
+            Map<String, Object> roundInfo = gameSessionService.getRoundInfo(sessionCode);
+            return ResponseEntity.ok(roundInfo);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al obtener información de ronda: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Resetea el estado ready de todos los usuarios
+     * Útil para volver a una fase de preparación
+     */
+    @PostMapping("/{sessionCode}/reset-users-ready")
+    public ResponseEntity<Map<String, String>> resetUsersReady(@PathVariable String sessionCode) {
+        try {
+            gameSessionService.resetUsersReady(sessionCode);
+
+            // Notificar a todos los usuarios
+            messagingTemplate.convertAndSend("/topic/" + sessionCode,
+                "{\"event\":\"usersReadyReset\"}");
+
+            return ResponseEntity.ok(Map.of("message", "Usuarios reseteados exitosamente"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al resetear usuarios: " + e.getMessage()));
+        }
+    }
 
 }
+

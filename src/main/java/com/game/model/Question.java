@@ -25,6 +25,8 @@ public class Question implements Serializable {
 
     private boolean anonymous; // Indica si la pregunta es anónima
 
+    private String roundId; // ID de la ronda/vuelta actual del juego
+
     @ManyToOne
     @JoinColumn(name = "game_session_id")
     @JsonIgnore // Ignorar la serialización de esta referencia

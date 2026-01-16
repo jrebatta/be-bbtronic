@@ -34,6 +34,10 @@ public class GameSession {
 
     private String currentGame; // Juego activo actual: null, "preguntas-directas", "yo-nunca-nunca", etc.
 
+    private String currentRoundId; // ID de la ronda actual de preguntas directas
+
+    private String roundStatus; // Estado de la ronda: WAITING_QUESTIONS, IN_PROGRESS, COMPLETED
+
     @OneToMany(mappedBy = "gameSession", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Question> questions = new ArrayList<>();
 

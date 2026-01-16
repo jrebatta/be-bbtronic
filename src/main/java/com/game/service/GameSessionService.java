@@ -124,11 +124,42 @@ public class GameSessionService {
                 .orElseThrow(() -> new IllegalArgumentException("Invalid session code"));
     }
 
+    /**
+     * Método genérico para marcar que el juego ha iniciado
+     * NO específico para ningún juego en particular
+     */
     public void startGame(String sessionCode) {
         GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid session code"));
         session.setGameStarted(true);
-        session.setCurrentGame("preguntas-directas"); // Establecer el juego actual
+        gameSessionRepository.save(session);
+    }
+
+    /**
+     * Inicia específicamente el juego de "Preguntas Directas" con sistema de rondas
+     * SOLO usar para Preguntas Directas
+     */
+    @Transactional
+    public void startPreguntasDirectas(String sessionCode) {
+        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid session code"));
+
+        session.setGameStarted(true);
+        session.setCurrentGame("preguntas-directas");
+
+        // Generar un nuevo ID de ronda único
+        String newRoundId = UUID.randomUUID().toString();
+        session.setCurrentRoundId(newRoundId);
+        session.setRoundStatus("WAITING_QUESTIONS");
+
+        // Resetear todos los usuarios a no listos para la nueva ronda
+        session.getUsers().forEach(user -> {
+            user.setReady(false);
+            userRepository.save(user);
+        });
+
+        // Limpiar las preguntas mostradas para la nueva ronda
+        session.setShownQuestions(new HashSet<>());
 
         if (!session.getQuestions().isEmpty()) {
             Question firstQuestion = session.getQuestions().getFirst();
@@ -137,15 +168,22 @@ public class GameSessionService {
         }
 
         gameSessionRepository.save(session);
+        System.out.println("Started Preguntas Directas with round ID: " + newRoundId + " - Status: WAITING_QUESTIONS");
     }
 
     public Question selectAndSetNextQuestion(String sessionCode, String lastToUser) {
         GameSession gameSession = gameSessionRepository.findBySessionCode(sessionCode)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid session code"));
 
-        List<Question> questions = new ArrayList<>(gameSession.getQuestions());
+        String currentRoundId = gameSession.getCurrentRoundId();
+
+        // Filtrar solo las preguntas de la ronda actual
+        List<Question> questions = gameSession.getQuestions().stream()
+                .filter(q -> currentRoundId != null && currentRoundId.equals(q.getRoundId()))
+                .toList();
+
         if (questions.isEmpty()) {
-            throw new IllegalArgumentException("No questions in session");
+            throw new IllegalArgumentException("No questions in current round");
         }
 
         List<Question> filteredQuestions = questions.stream()
@@ -179,8 +217,10 @@ public class GameSessionService {
 
     public List<Question> getQuestionsForSession(String sessionCode) {
         GameSession session = getGameSessionByCode(sessionCode);
+        String currentRoundId = session.getCurrentRoundId();
 
         return session.getQuestions().stream()
+                .filter(q -> currentRoundId != null && currentRoundId.equals(q.getRoundId()))
                 .sorted(Comparator.comparingLong(Question::getId))
                 .collect(Collectors.toList());
     }
@@ -227,12 +267,33 @@ public class GameSessionService {
     public void saveQuestion(String sessionCode, String fromUser, String toUser, String questionText, boolean anonymous) {
         GameSession session = getGameSessionByCode(sessionCode);
 
+        // SOLO validar rondas si el juego actual es "preguntas-directas"
+        if ("preguntas-directas".equals(session.getCurrentGame())) {
+            // Validar que existe un roundId activo
+            if (session.getCurrentRoundId() == null) {
+                throw new IllegalStateException("No hay una ronda activa. Inicia el juego primero.");
+            }
+
+            // Validar que la ronda está esperando preguntas
+            if (!"WAITING_QUESTIONS".equals(session.getRoundStatus())) {
+                throw new IllegalStateException("La ronda ya ha iniciado. No se pueden enviar más preguntas.");
+            }
+        }
+
         Question question = new Question();
         question.setFromUser(fromUser);
         question.setToUser(toUser);
         question.setQuestion(questionText);
         question.setAnonymous(anonymous);
         question.setGameSession(session);
+
+        // Solo asignar roundId si existe (para preguntas-directas)
+        if (session.getCurrentRoundId() != null) {
+            question.setRoundId(session.getCurrentRoundId());
+            System.out.println("Pregunta guardada para roundId: " + session.getCurrentRoundId());
+        } else {
+            System.out.println("Pregunta guardada sin roundId (juego diferente a preguntas-directas)");
+        }
 
         questionRepository.save(question);
     }
@@ -244,7 +305,123 @@ public class GameSessionService {
 
     public int getTotalQuestions(String sessionCode) {
         GameSession session = getGameSessionByCode(sessionCode);
-        return session.getQuestions().size();
+        String currentRoundId = session.getCurrentRoundId();
+
+        return (int) session.getQuestions().stream()
+                .filter(q -> currentRoundId != null && currentRoundId.equals(q.getRoundId()))
+                .count();
+    }
+
+    /**
+     * Inicia una nueva ronda de preguntas directas
+     * Genera un nuevo roundId, resetea usuarios ready y limpia preguntas mostradas
+     */
+    @Transactional
+    public Map<String, Object> startNewRound(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+
+        // Generar nuevo roundId
+        String newRoundId = UUID.randomUUID().toString();
+        session.setCurrentRoundId(newRoundId);
+        session.setRoundStatus("WAITING_QUESTIONS");
+        session.setCurrentGame("preguntas-directas");
+
+        // Resetear usuarios ready
+        session.getUsers().forEach(user -> {
+            user.setReady(false);
+            userRepository.save(user);
+        });
+
+        // Limpiar preguntas mostradas
+        session.setShownQuestions(new HashSet<>());
+        session.setCurrentQuestionIndex(0);
+
+        gameSessionRepository.save(session);
+
+        System.out.println("Nueva ronda iniciada - roundId: " + newRoundId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("roundId", newRoundId);
+        response.put("status", "WAITING_QUESTIONS");
+        response.put("message", "Nueva ronda iniciada. Los usuarios pueden enviar preguntas.");
+
+        return response;
+    }
+
+    /**
+     * Inicia la fase de juego de la ronda (cuando todos están ready)
+     * Cambia el estado de WAITING_QUESTIONS a IN_PROGRESS
+     */
+    @Transactional
+    public void startRoundPlay(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+
+        if (!"WAITING_QUESTIONS".equals(session.getRoundStatus())) {
+            throw new IllegalStateException("La ronda ya está en progreso o completada");
+        }
+
+        // Verificar que hay preguntas en la ronda actual
+        long questionsCount = session.getQuestions().stream()
+                .filter(q -> session.getCurrentRoundId() != null &&
+                           session.getCurrentRoundId().equals(q.getRoundId()))
+                .count();
+
+        if (questionsCount == 0) {
+            throw new IllegalStateException("No hay preguntas para jugar en esta ronda");
+        }
+
+        session.setRoundStatus("IN_PROGRESS");
+        gameSessionRepository.save(session);
+
+        System.out.println("Ronda " + session.getCurrentRoundId() + " - Estado cambiado a IN_PROGRESS");
+    }
+
+    /**
+     * Obtiene información completa de la ronda actual
+     */
+    public Map<String, Object> getRoundInfo(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+
+        Map<String, Object> roundInfo = new HashMap<>();
+        roundInfo.put("roundId", session.getCurrentRoundId());
+        roundInfo.put("status", session.getRoundStatus());
+        roundInfo.put("currentGame", session.getCurrentGame());
+
+        // Contar preguntas de la ronda actual
+        if (session.getCurrentRoundId() != null) {
+            long questionsCount = session.getQuestions().stream()
+                    .filter(q -> session.getCurrentRoundId().equals(q.getRoundId()))
+                    .count();
+            roundInfo.put("totalQuestions", questionsCount);
+            roundInfo.put("shownQuestions", session.getShownQuestions().size());
+        } else {
+            roundInfo.put("totalQuestions", 0);
+            roundInfo.put("shownQuestions", 0);
+        }
+
+        // Estado de usuarios ready
+        List<User> users = session.getUsers();
+        long readyCount = users.stream().filter(User::isReady).count();
+        roundInfo.put("usersReady", readyCount);
+        roundInfo.put("totalUsers", users.size());
+        roundInfo.put("allUsersReady", readyCount == users.size() && users.size() > 0);
+
+        return roundInfo;
+    }
+
+    /**
+     * Resetea el estado ready de todos los usuarios de una sesión
+     */
+    @Transactional
+    public void resetUsersReady(String sessionCode) {
+        GameSession session = getGameSessionByCode(sessionCode);
+
+        session.getUsers().forEach(user -> {
+            user.setReady(false);
+            userRepository.save(user);
+        });
+
+        System.out.println("Usuarios reseteados a no listos para sesión: " + sessionCode);
     }
 
     @Transactional

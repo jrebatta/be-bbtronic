@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = {"https://fe-bbtronic-vue.vercel.app", "http://127.0.0.1:5500"}) // Permite solicitudes solo desde este origen
+@CrossOrigin(origins = {"https://fe-bbtronic-vue.vercel.app", "http://localhost:5173"}) // Permite solicitudes solo desde este origen
 @RequestMapping("/api/users")
 public class UserController {
 
@@ -93,15 +93,16 @@ public class UserController {
     }
 
     /**
-     * Marca a un usuario como listo.
+     * Marca a un usuario como listo y devuelve información de la ronda actual.
      *
      * @param username el nombre de usuario del usuario
-     * @return una respuesta indicando el resultado de la operación
+     * @return una respuesta con información de la ronda y estado del usuario
      */
     @PostMapping("/{username}/ready")
-    public ResponseEntity<Void> setUserReady(@PathVariable String username) {
-        userService.setUserReady(username);
+    public ResponseEntity<Map<String, Object>> setUserReady(@PathVariable String username) {
+        Map<String, Object> response = userService.setUserReadyWithRoundInfo(username);
         System.out.println("Usuario marcado como listo: " + username);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(response);
     }
 }
+

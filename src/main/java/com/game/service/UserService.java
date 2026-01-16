@@ -8,7 +8,9 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -125,4 +127,40 @@ public class UserService {
         user.setReady(true);
         userRepository.save(user);
     }
+
+    /**
+     * Marca a un usuario como listo y devuelve información de la ronda actual.
+     *
+     * @param username el nombre de usuario del usuario
+     * @return Map con información de la ronda y estado del usuario
+     * @throws IllegalArgumentException si el usuario no es encontrado
+     */
+    public Map<String, Object> setUserReadyWithRoundInfo(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        user.setReady(true);
+        userRepository.save(user);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("username", username);
+        response.put("ready", true);
+
+        // Agregar información de la sesión y ronda si el usuario está en una sesión
+        if (user.getGameSession() != null) {
+            GameSession session = user.getGameSession();
+            response.put("sessionCode", session.getSessionCode());
+            response.put("roundId", session.getCurrentRoundId());
+            response.put("roundStatus", session.getRoundStatus());
+
+            // Contar usuarios listos
+            long readyCount = session.getUsers().stream().filter(User::isReady).count();
+            response.put("usersReady", readyCount);
+            response.put("totalUsers", session.getUsers().size());
+            response.put("allUsersReady", readyCount == session.getUsers().size());
+        }
+
+        return response;
+    }
 }
+
