@@ -640,7 +640,20 @@ public class GameSessionService {
 
         // Establecer el juego actual
         session.setCurrentGame("preguntas-incomodas");
+
+        // Generar un nuevo ID de ronda único
+        String newRoundId = UUID.randomUUID().toString();
+        session.setCurrentRoundId(newRoundId);
+        session.setRoundStatus("IN_PROGRESS");
+
+        // Resetear todos los usuarios a no listos para la nueva ronda
+        session.getUsers().forEach(user -> {
+            user.setReady(false);
+            userRepository.save(user);
+        });
+
         gameSessionRepository.save(session);
+        System.out.println("Started Preguntas Incómodas with round ID: " + newRoundId);
 
         messagingTemplate.convertAndSend("/topic/" + sessionCode, "{\"event\":\"preguntasIncomodasStarted\"}");
     }
@@ -878,6 +891,8 @@ public class GameSessionService {
 
         // Limpiar el juego actual
         session.setCurrentGame(null);
+        session.setCurrentRoundId(null);
+        session.setRoundStatus(null);
 
         // Guardar cambios
         gameSessionRepository.save(session);
