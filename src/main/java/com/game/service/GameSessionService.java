@@ -865,6 +865,27 @@ public class GameSessionService {
         }
         return "SHOWING_QUESTIONS"; // Por defecto
     }
+
+    /**
+     * Termina el juego actual limpiando el estado del juego
+     * @param sessionCode Código de la sesión
+     * @return GameSession actualizada
+     */
+    @Transactional
+    public GameSession endCurrentGame(String sessionCode) {
+        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Sesión no encontrada"));
+
+        // Limpiar el juego actual
+        session.setCurrentGame(null);
+
+        // Guardar cambios
+        gameSessionRepository.save(session);
+
+        System.out.println("✅ Juego terminado para sesión: " + sessionCode);
+
+        return session;
+    }
 }
 
 

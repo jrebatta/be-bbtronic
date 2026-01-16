@@ -567,6 +567,37 @@ public class GameSessionController {
         }
     }
 
-}
+    /**
+     * Endpoint para terminar el juego actual
+     * Limpia el currentGame y gameState de la sesión
+     *
+     * POST /api/game-sessions/{sessionCode}/end-game
+     *
+     * @param sessionCode Código de la sesión
+     * @return Mensaje de éxito con el código de sesión
+     */
+    @PostMapping("/{sessionCode}/end-game")
+    public ResponseEntity<?> endCurrentGame(@PathVariable String sessionCode) {
+        try {
+            // Buscar y terminar el juego actual
+            GameSession session = gameSessionService.endCurrentGame(sessionCode);
 
+            return ResponseEntity.ok(Map.of(
+                    "message", "Juego terminado exitosamente",
+                    "sessionCode", sessionCode
+            ));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                    Map.of("error", e.getMessage())
+            );
+        } catch (Exception e) {
+            System.err.println("❌ Error al terminar juego: " + e.getMessage());
+            return ResponseEntity.badRequest().body(
+                    Map.of("error", e.getMessage())
+            );
+        }
+    }
+
+}
 
