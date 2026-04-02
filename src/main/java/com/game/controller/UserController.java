@@ -41,18 +41,17 @@ public class UserController {
      * @param username el nombre de usuario del nuevo usuario
      * @return una respuesta con el nombre de usuario y el token de sesión
      */
-    @GetMapping("/register")
-    public ResponseEntity<Map<String, String>> registerUser(@RequestParam("username") String username) {
+    @PostMapping("/register")
+    public ResponseEntity<Map<String, String>> registerUser(@RequestBody Map<String, String> body) {
         try {
+            String username = body.get("username");
+            if (username == null || username.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El nombre de usuario es obligatorio."));
+            }
             User user = userService.registerUser(username);
-            Map<String, String> response = new HashMap<>();
-            response.put("username", user.getUsername());
-            response.put("sessionToken", user.getSessionToken());
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(Map.of("username", user.getUsername(), "sessionToken", user.getSessionToken()));
         } catch (IllegalArgumentException e) {
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 

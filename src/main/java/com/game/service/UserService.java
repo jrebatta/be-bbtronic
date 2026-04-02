@@ -4,7 +4,6 @@ import com.game.model.GameSession;
 import com.game.model.User;
 import com.game.repository.GameSessionRepository;
 import com.game.repository.UserRepository;
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -104,15 +103,6 @@ public class UserService {
             session.getUsers().remove(user);
             gameSessionRepository.save(session);
         });
-    }
-
-    /**
-     * Borra todos los usuarios al iniciar la aplicación.
-     */
-    @PostConstruct
-    public void clearUsersOnStartup() {
-        userRepository.deleteAll();
-        System.out.println("Todos los usuarios han sido borrados al iniciar la aplicación.");
     }
 
     /**
