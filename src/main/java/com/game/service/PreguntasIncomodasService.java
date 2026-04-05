@@ -22,6 +22,7 @@ public class PreguntasIncomodasService {
 
     private final Map<String, Queue<PreguntasIncomodas>> sessionQuestions = new HashMap<>();
     private final Map<String, List<User>> remainingUsers = new HashMap<>();
+    private final Map<String, Map<String, String>> lastQuestion = new HashMap<>();
 
     public PreguntasIncomodasService(GameSessionRepository gameSessionRepository,
                                      UserRepository userRepository,
@@ -69,15 +70,21 @@ public class PreguntasIncomodasService {
 
         User randomUser = getRandomUser(sessionCode);
         String text = question.getTexto().replace("{player}", randomUser.getUsername());
+        lastQuestion.put(sessionCode, Map.of("question", text, "toUser", randomUser.getUsername()));
         messagingTemplate.convertAndSend("/topic/" + sessionCode,
                 Map.of("event", "nextQuestion", "question", text, "toUser", randomUser.getUsername()));
 
         return Map.of("question", text, "toUser", randomUser.getUsername());
     }
 
+    public Map<String, String> getLastQuestion(String sessionCode) {
+        return lastQuestion.get(sessionCode);
+    }
+
     public void cleanup(String sessionCode) {
         sessionQuestions.remove(sessionCode);
         remainingUsers.remove(sessionCode);
+        lastQuestion.remove(sessionCode);
     }
 
     private User getRandomUser(String sessionCode) {

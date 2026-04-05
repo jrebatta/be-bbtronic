@@ -22,6 +22,7 @@ public class QuienEsMasProbableService {
     private final Map<String, Map<String, Integer>> sessionVotes = new HashMap<>();
     private final Map<String, Set<String>> sessionUsersVoted = new HashMap<>();
     private final Map<String, List<User>> remainingUsers = new HashMap<>();
+    private final Map<String, String> lastQuestion = new HashMap<>();
 
     public QuienEsMasProbableService(GameSessionRepository gameSessionRepository,
                                      QuienEsMasProbableRepository repository,
@@ -59,7 +60,12 @@ public class QuienEsMasProbableService {
         if (text.contains("{player}")) {
             text = text.replace("{player}", getRandomUser(sessionCode).getUsername());
         }
+        lastQuestion.put(sessionCode, text);
         return text;
+    }
+
+    public String getLastQuestion(String sessionCode) {
+        return lastQuestion.get(sessionCode);
     }
 
     public void registerVote(String sessionCode, String votingUser, String votedUser) {
@@ -108,6 +114,7 @@ public class QuienEsMasProbableService {
         sessionQuestions.remove(sessionCode);
         clearVotes(sessionCode);
         remainingUsers.remove(sessionCode);
+        lastQuestion.remove(sessionCode);
     }
 
     private User getRandomUser(String sessionCode) {

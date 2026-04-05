@@ -26,18 +26,33 @@ public class GameSessionService {
     private final QuestionRepository questionRepository;
     private final JdbcTemplate jdbcTemplate;
     private final UserService userService;
+    private final YoNuncaNuncaService yoNuncaNuncaService;
+    private final CulturaPendejaService culturaPendejaService;
+    private final QuienEsMasProbableService quienEsMasProbableService;
+    private final PreguntasIncomodasService preguntasIncomodasService;
+    private final ElImpostorService elImpostorService;
 
     @Autowired
     public GameSessionService(GameSessionRepository gameSessionRepository,
                               UserRepository userRepository,
                               QuestionRepository questionRepository,
                               JdbcTemplate jdbcTemplate,
-                              UserService userService) {
+                              UserService userService,
+                              YoNuncaNuncaService yoNuncaNuncaService,
+                              CulturaPendejaService culturaPendejaService,
+                              QuienEsMasProbableService quienEsMasProbableService,
+                              PreguntasIncomodasService preguntasIncomodasService,
+                              ElImpostorService elImpostorService) {
         this.gameSessionRepository = gameSessionRepository;
         this.userRepository = userRepository;
         this.questionRepository = questionRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.userService = userService;
+        this.yoNuncaNuncaService = yoNuncaNuncaService;
+        this.culturaPendejaService = culturaPendejaService;
+        this.quienEsMasProbableService = quienEsMasProbableService;
+        this.preguntasIncomodasService = preguntasIncomodasService;
+        this.elImpostorService = elImpostorService;
     }
 
     @PostConstruct
@@ -162,7 +177,7 @@ public class GameSessionService {
 
         GameStateDTO gameState = null;
         if (session.getCurrentGame() != null && !session.getCurrentGame().isEmpty()) {
-            Map<String, Object> questionData = buildPreguntasDirectasData(session);
+            Map<String, Object> questionData = buildQuestionData(session);
             gameState = new GameStateDTO(
                     session.getRoundStatus() != null ? session.getRoundStatus() : "IN_PROGRESS",
                     session.getCurrentRoundId(),
@@ -175,10 +190,41 @@ public class GameSessionService {
                 userDTOs, session.getCurrentGame(), gameState, System.currentTimeMillis());
     }
 
-    // Solo Preguntas Directas tiene estado persistido en DB para sincronizar.
-    // Los demás juegos manejan su estado en sus propios services.
+    /**
+     * Construye los datos de la pregunta actual según el tipo de juego activo.
+     * Permite que el frontend restaure el estado al reconectarse.
+     */
+    private Map<String, Object> buildQuestionData(GameSession session) {
+        String game = session.getCurrentGame();
+        String sessionCode = session.getSessionCode();
+        return switch (game) {
+            case "preguntas-directas" -> buildPreguntasDirectasData(session);
+            case "yo-nunca-nunca" -> {
+                var q = yoNuncaNuncaService.getLastQuestion(sessionCode);
+                yield q != null ? Map.of("currentQuestion", Map.of("texto", q.getTexto())) : Map.of("currentQuestion", (Object) null);
+            }
+            case "cultura-pendeja" -> {
+                var q = culturaPendejaService.getLastQuestion(sessionCode);
+                yield q != null ? Map.of("currentQuestion", Map.<String, Object>of(
+                        "id", q.getId(), "texto", q.getTexto(), "tipo", q.getTipo()
+                )) : Map.of("currentQuestion", (Object) null);
+            }
+            case "quien-es-mas-probable" -> {
+                var q = quienEsMasProbableService.getLastQuestion(sessionCode);
+                yield Map.of("currentQuestion", q != null ? q : (Object) null);
+            }
+            case "preguntas-incomodas" -> {
+                var q = preguntasIncomodasService.getLastQuestion(sessionCode);
+                yield q != null ? Map.of("currentQuestion", Map.<String, Object>of(
+                        "question", q.get("question"), "toUser", q.get("toUser")
+                )) : Map.of("currentQuestion", (Object) null);
+            }
+            case "el-impostor" -> elImpostorService.getSyncState(sessionCode);
+            default -> null;
+        };
+    }
+
     private Map<String, Object> buildPreguntasDirectasData(GameSession session) {
-        if (!"preguntas-directas".equals(session.getCurrentGame())) return null;
         try {
             if (!"IN_PROGRESS".equals(session.getRoundStatus()) || session.getShownQuestions().isEmpty()) return null;
             List<Question> ordered = session.getQuestions().stream()
@@ -189,11 +235,13 @@ public class GameSessionService {
             if (ordered.isEmpty() || idx < 0 || idx >= ordered.size()) return null;
             Question q = ordered.get(idx);
             Map<String, Object> data = new HashMap<>();
-            data.put("question", q.getQuestion());
-            data.put("fromUser", q.isAnonymous() ? "Anonymous" : q.getFromUser());
-            data.put("toUser", q.getToUser());
-            data.put("numeroDePregunta", idx + 1);
-            data.put("anonymous", q.isAnonymous());
+            data.put("currentQuestion", Map.of(
+                    "question", q.getQuestion(),
+                    "fromUser", q.isAnonymous() ? "Anonymous" : q.getFromUser(),
+                    "toUser", q.getToUser(),
+                    "numeroDePregunta", idx + 1,
+                    "anonymous", q.isAnonymous()
+            ));
             return data;
         } catch (Exception e) {
             return null;

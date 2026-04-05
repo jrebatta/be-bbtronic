@@ -15,6 +15,7 @@ public class CulturaPendejaService {
     private final GameSessionRepository gameSessionRepository;
     private final CulturaPendejaRepository repository;
     private final Map<String, List<CulturaPendeja>> sessionQuestions = new HashMap<>();
+    private final Map<String, CulturaPendeja> lastQuestion = new HashMap<>();
 
     public CulturaPendejaService(GameSessionRepository gameSessionRepository,
                                  CulturaPendejaRepository repository) {
@@ -44,11 +45,17 @@ public class CulturaPendejaService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No hay más preguntas disponibles."));
         questions.remove(next);
+        lastQuestion.put(sessionCode, next);
         return next;
+    }
+
+    public CulturaPendeja getLastQuestion(String sessionCode) {
+        return lastQuestion.get(sessionCode);
     }
 
     public void cleanup(String sessionCode) {
         sessionQuestions.remove(sessionCode);
+        lastQuestion.remove(sessionCode);
     }
 
     private GameSession getSession(String sessionCode) {

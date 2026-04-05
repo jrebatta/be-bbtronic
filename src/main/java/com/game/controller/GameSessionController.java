@@ -6,6 +6,7 @@ import com.game.model.User;
 import com.game.model.WaitingMessage;
 import com.game.repository.WaitingMessageRepository;
 import com.game.service.*;
+import com.game.service.ElImpostorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,7 @@ public class GameSessionController {
     private final QuienEsMasProbableService quienEsMasProbableService;
     private final PreguntasIncomodasService preguntasIncomodasService;
     private final WaitingMessageRepository waitingMessageRepository;
+    private final ElImpostorService elImpostorService;
 
     @Autowired
     public GameSessionController(GameSessionService gameSessionService,
@@ -42,7 +44,8 @@ public class GameSessionController {
                                  CulturaPendejaService culturaPendejaService,
                                  QuienEsMasProbableService quienEsMasProbableService,
                                  PreguntasIncomodasService preguntasIncomodasService,
-                                 WaitingMessageRepository waitingMessageRepository) {
+                                 WaitingMessageRepository waitingMessageRepository,
+                                 ElImpostorService elImpostorService) {
         this.gameSessionService = gameSessionService;
         this.userService = userService;
         this.messagingTemplate = messagingTemplate;
@@ -52,6 +55,7 @@ public class GameSessionController {
         this.quienEsMasProbableService = quienEsMasProbableService;
         this.preguntasIncomodasService = preguntasIncomodasService;
         this.waitingMessageRepository = waitingMessageRepository;
+        this.elImpostorService = elImpostorService;
     }
 
     // ─── Gestión de sesión ────────────────────────────────────────────────────
@@ -113,6 +117,25 @@ public class GameSessionController {
             return ResponseEntity.ok(Map.of("sessionToken", user.getSessionToken()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{sessionCode}/kick")
+    public ResponseEntity<?> kickUser(@PathVariable String sessionCode,
+                                      @RequestParam String username) {
+        try {
+            userService.kickUser(sessionCode, username);
+
+            messagingTemplate.convertAndSend("/topic/" + sessionCode,
+                    Map.of("event", "kicked", "username", username));
+
+            List<User> updatedUsers = gameSessionService.getUsersInSession(sessionCode);
+            messagingTemplate.convertAndSend("/topic/" + sessionCode,
+                    Map.of("event", "userLeft", "username", username, "users", updatedUsers));
+
+            return ResponseEntity.ok(Map.of("message", "Usuario expulsado"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -458,6 +481,70 @@ public class GameSessionController {
         }
     }
 
+    // ─── El Impostor ──────────────────────────────────────────────────────────
+
+    @PostMapping("/{sessionCode}/el-impostor/start")
+    public ResponseEntity<?> startElImpostor(@PathVariable String sessionCode,
+                                              @RequestBody Map<String, Object> body) {
+        try {
+            int impostorCount = ((Number) body.getOrDefault("impostorCount", 1)).intValue();
+            elImpostorService.start(sessionCode, impostorCount);
+            return ResponseEntity.ok(Map.of("message", "El Impostor iniciado"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{sessionCode}/el-impostor/my-role")
+    public ResponseEntity<?> getMyRole(@PathVariable String sessionCode,
+                                        @RequestParam String username) {
+        try {
+            return ResponseEntity.ok(elImpostorService.getMyRole(sessionCode, username));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{sessionCode}/el-impostor/call-vote")
+    public ResponseEntity<?> callVote(@PathVariable String sessionCode,
+                                       @RequestParam String username) {
+        try {
+            elImpostorService.callVote(sessionCode, username);
+            return ResponseEntity.ok(Map.of("message", "Votación iniciada"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{sessionCode}/el-impostor/vote")
+    public ResponseEntity<?> submitVote(@PathVariable String sessionCode,
+                                         @RequestBody Map<String, String> body) {
+        String votingUser = body.get("votingUser");
+        String votedUser = body.get("votedUser");
+        if (votingUser == null || votingUser.isEmpty())
+            return ResponseEntity.badRequest().body(Map.of("error", "votingUser es obligatorio"));
+        if (votedUser == null || votedUser.isEmpty())
+            return ResponseEntity.badRequest().body(Map.of("error", "votedUser es obligatorio"));
+        try {
+            elImpostorService.vote(sessionCode, votingUser, votedUser);
+            return ResponseEntity.ok(Map.of("message", "Voto registrado"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ─── Limpieza de estado en memoria al terminar un juego ──────────────────
 
     private void cleanupAllGameServices(String sessionCode) {
@@ -465,5 +552,6 @@ public class GameSessionController {
         culturaPendejaService.cleanup(sessionCode);
         quienEsMasProbableService.cleanup(sessionCode);
         preguntasIncomodasService.cleanup(sessionCode);
+        elImpostorService.cleanup(sessionCode);
     }
 }

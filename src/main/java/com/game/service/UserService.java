@@ -80,6 +80,28 @@ public class UserService {
      * @param sessionToken el token de sesión del usuario
      * @return true si el usuario fue cerrado correctamente, false en caso contrario
      */
+    /**
+     * Expulsa a un usuario de una sesión por username.
+     *
+     * @return el User eliminado
+     * @throws IllegalArgumentException si el usuario no existe en esa sesión
+     */
+    public User kickUser(String sessionCode, String username) {
+        GameSession session = gameSessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Código de sesión inválido"));
+
+        User user = session.getUsers().stream()
+                .filter(u -> u.getUsername().equals(username))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado en la sesión"));
+
+        session.getUsers().remove(user);
+        user.setGameSession(null);
+        gameSessionRepository.save(session);
+        userRepository.delete(user);
+        return user;
+    }
+
     public boolean logoutUser(String sessionToken) {
         Optional<User> user = userRepository.findBySessionToken(sessionToken);
 
